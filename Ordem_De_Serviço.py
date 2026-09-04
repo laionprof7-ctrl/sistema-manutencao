@@ -6,6 +6,17 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Gestão de Manutenção - Copa Ambiental", page_icon="🚛", layout="wide")
 
+# OCULTA TOTALMENTE A BARRA SUPERIOR, O ÍCONE DO GITHUB E O MENU DO STREAMLIT
+esconder_menu = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stHeader"] {display: none;}
+    </style>
+"""
+st.markdown(esconder_menu, unsafe_allow_html=True)
+
 # ARQUIVOS DE BANCO DE DADOS
 ARQUIVO_CSV = 'chamados_manutencao.csv'
 ARQUIVO_USUARIOS = 'usuarios.csv'
