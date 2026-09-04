@@ -168,6 +168,8 @@ def carregar_dados():
         df['Prioridade'] = 'Média'
     if 'Mecanico_Responsavel' not in df.columns:
         df['Mecanico_Responsavel'] = 'Não Atribuído'
+    if 'Motorista' not in df.columns:
+        df['Motorista'] = 'Não Identificado'
         
     for col in colunas_obrigatorias:
         if col not in df.columns:
@@ -237,18 +239,16 @@ else:
         st.header("Abertura de Ordem de Serviço")
         with st.form("form_chamado", clear_on_submit=True):
             
-            # Divide em duas colunas para posicionar o campo de seleção e o checkbox lado a lado
             col_veic, col_chk = st.columns([3, 1])
             
             with col_veic:
                 veiculo_sel = st.selectbox("Selecione o Veículo/Equipamento", VEICULOS)
             
             with col_chk:
-                st.write("") # Espaçadores para alinhar verticalmente
+                st.write("")
                 st.write("")
                 outro_marcado = st.checkbox("Outros")
 
-            # Exibe o campo de digitação manual apenas se o checkbox estiver marcado
             outros_veiculo = ""
             if outro_marcado:
                 outros_veiculo = st.text_input("Especifique o Veículo/Equipamento")
@@ -289,19 +289,21 @@ else:
         
         df_exibicao = df_os.copy()
         
-        # Filtro estrito: Apenas identificação do veículo, Nº OS, Data, Descrição e Status
-        colunas_motorista = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
-        
+        # Filtro de Colunas de acordo com o Nível de Acesso
         if nivel_user == 1:
-            df_exibicao = df_exibicao[colunas_motorista]
-            # Renomeia para exibição mais amigável na tela
+            colunas_nivel_1 = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
+            df_exibicao = df_exibicao[colunas_nivel_1]
             df_exibicao.columns = ['Nº da OS', 'Data de Registro', 'Veículo / Equipamento', 'Placa', 'Descrição do Problema', 'Status']
+        else:
+            # Nível 2, 3 e 4 visualizam o nome de quem abriu o chamado (Motorista/Solicitante)
+            colunas_gestao = ['ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status', 'Prioridade', 'Mecanico_Responsavel']
+            df_exibicao = df_exibicao[colunas_gestao]
+            df_exibicao.columns = ['Nº da OS', 'Data de Registro', 'Aberto por (Solicitante)', 'Veículo / Equipamento', 'Placa', 'Descrição do Problema', 'Status', 'Prioridade', 'Mecânico']
 
         # Busca por Placa
         if busca_placa:
-            col_busca = 'Placa' if 'Placa' in df_exibicao.columns else 'Placa'
-            if col_busca in df_exibicao.columns:
-                st.dataframe(df_exibicao[df_exibicao[col_busca].astype(str).str.contains(busca_placa, na=False)], use_container_width=True)
+            if 'Placa' in df_exibicao.columns:
+                st.dataframe(df_exibicao[df_exibicao['Placa'].astype(str).str.contains(busca_placa, na=False)], use_container_width=True)
             else:
                 st.dataframe(df_exibicao, use_container_width=True)
         else:
@@ -316,7 +318,8 @@ else:
             st.info("Não há chamados aguardando aprovação.")
         else:
             for idx, row in pendentes.iterrows():
-                with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']}) - Solicitante: {row['Motorista']}"):
+                    st.write(f"**Aberto por:** {row['Motorista']}")
                     st.write(f"**Data da Abertura:** {row['Data']}")
                     st.write(f"**Problema:** {row['Descricao_Problema']}")
                     
@@ -339,6 +342,7 @@ else:
         else:
             for idx, row in aprovados.iterrows():
                 with st.expander(f"[{row['Prioridade']}] {row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                    st.write(f"**Solicitante:** {row['Motorista']}")
                     st.write(f"**Problema:** {row['Descricao_Problema']}")
                     st.write(f"**Status Atual:** {row['Status']}")
                     
