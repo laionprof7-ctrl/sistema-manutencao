@@ -1,191 +1,237 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import os
+import hashlib
 
-# Configuração da página
-st.set_page_config(page_title="Sistema de Manutenção", page_icon="🚛", layout="wide")
+st.set_page_config(page_title="Gestão de Manutenção - Copa Ambiental", page_icon="🚛", layout="wide")
 
-ARQUIVO_DADOS = 'chamados_manutencao.csv'
+# ARCHIVOS DE BANCO DE DADOS
+ARQUIVO_CSV = 'chamados_manutencao.csv'
+ARQUIVO_USUARIOS = 'usuarios.csv'
 
-# Função para carregar os dados
-def carregar_dados():
-    if os.path.exists(ARQUIVO_DADOS):
-        df = pd.read_csv(ARQUIVO_DADOS, dtype=str)
-        # Garante que a coluna de data exista para conversão
-        if not df.empty and 'Data/Hora' in df.columns:
-            df['Data_dt'] = pd.to_datetime(df['Data/Hora'], format='%d/%m/%Y %H:%M', errors='coerce')
-        else:
-            df['Data_dt'] = pd.NaT
-        return df
-    else:
-        return pd.DataFrame(columns=[
-            'Protocolo', 'Data/Hora', 'Modelo', 'Placa', 
-            'Anomalia_Texto', 'Parecer_Mecanico', 'Previsao', 'Status', 'Data_dt'
-        ])
-
-# Função para salvar os dados
-def salvar_dados(df):
-    # Remove a coluna auxiliar de data antes de salvar no CSV
-    df_salvar = df.drop(columns=['Data_dt'], errors='ignore')
-    df_salvar.to_csv(ARQUIVO_DADOS, index=False)
-
-# Carrega base existente
-df_chamados = carregar_dados()
-
-st.title("🚛 Gestão de Ordens de Serviço & Manutenção")
-
-# Menu de Navegação Superior
-aba = st.sidebar.radio("Selecione seu perfil:", ["1. Motorista (Abrir Chamado)", "2. Mecânico (Atender/Encerrar)", "3. Consultar Chamados"])
-
-OPCOES_MODELO = [
-    "Compactador", "Poliguindaste", "Baú", "Rollon", "Caçamba",
-    "Reboque Julieta", "Veículo Leve", "Trator", "Escavadeira",
-    "Retroescavadeira", "Sugador", "Carrinho Puxe"
+# LISTA DE VEÍCULOS
+VEICULOS = [
+    "Caminhão Compactador", "Caminhão Poliguindaste", "Caminhão Roll-On",
+    "Caminhão Pipa", "Caminhão Basculante", "Carregadeira",
+    "Retroescavadeira", "Trator de Esteira", "Motoniveladora",
+    "Pick-up Operacional", "Van de Equipe", "Veículo Leve / Apoio"
 ]
 
-# ---------------------------------------------------------
-# ABA 1: MOTORISTA
-# ---------------------------------------------------------
-if aba == "1. Motorista (Abrir Chamado)":
-    st.header("📋 Abertura de Chamado - Motorista")
-    
-    with st.form("form_motorista", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            modelo = st.selectbox("Modelo do Veículo / Equipamento", OPCOES_MODELO)
-        with col2:
-            placa = st.text_input("Placa / Identificação", placeholder="Ex: RPG4G65").upper()
-            
-        anomalia_texto = st.text_area("Descreva a anomalia ou problema identificado:")
-        
-        btn_enviar = st.form_submit_button("Enviar Chamado")
-        
-        if btn_enviar:
-            if not placa:
-                st.error("Por favor, informe a placa ou identificação do veículo.")
-            elif not anomalia_texto:
-                st.error("Por favor, descreva o problema no campo de anomalia.")
-            else:
-                novo_id = len(df_chamados) + 1001
-                protocolo = f"OS-{novo_id}"
-                data_atual_str = datetime.now().strftime("%d/%m/%Y %H:%M")
-                
-                novo_registro = pd.DataFrame([{
-                    'Protocolo': protocolo,
-                    'Data/Hora': data_atual_str,
-                    'Modelo': modelo,
-                    'Placa': placa,
-                    'Anomalia_Texto': anomalia_texto,
-                    'Parecer_Mecanico': 'Aguardando avaliação',
-                    'Previsao': 'A definir',
-                    'Status': 'Em Aberto',
-                    'Data_dt': pd.to_datetime(data_atual_str, format='%d/%m/%Y %H:%M')
-                }])
-                
-                df_chamados = pd.concat([df_chamados, novo_registro], ignore_index=True)
-                salvar_dados(df_chamados)
-                
-                st.success(f"✅ Chamado **{protocolo}** gerado com sucesso às {data_atual_str}!")
+# FUNÇÕES AUXILIARES PARA CRIPTOGRAFIA E USUÁRIOS
+def hash_senha(senha):
+    return hashlib.sha256(str.encode(senha)).hexdigest()
 
-# ---------------------------------------------------------
-# ABA 2: MECÂNICO
-# ---------------------------------------------------------
-elif aba == "2. Mecânico (Atender/Encerrar)":
-    st.header("🔧 Painel de Manutenção - Mecânico / Encarregado")
+def carregar_usuarios():
+    if not os.path.exists(ARQUIVO_USUARIOS):
+        # Cria usuário admin padrão se o arquivo não existir
+        df = pd.DataFrame([{
+            'usuario': 'admin',
+            'senha': hash_senha('admin123'),
+            'nome': 'Administrador',
+            'nivel': 2
+        }])
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return df
+    return pd.read_csv(ARQUIVO_USUARIOS)
+
+def salvar_usuario(novo_user, nova_senha, nome, nivel):
+    df = carregar_usuarios()
+    if novo_user in df['usuario'].values:
+        return False, "Usuário já existe!"
     
-    chamados_abertos = df_chamados[df_chamados['Status'] != 'Concluído']
+    novo_df = pd.DataFrame([{
+        'usuario': novo_user,
+        'senha': hash_senha(nova_senha),
+        'nome': nome,
+        'nivel': int(nivel)
+    }])
+    df = pd.concat([df, novo_df], ignore_index=True)
+    df.to_csv(ARQUIVO_USUARIOS, index=False)
+    return True, "Usuário cadastrado com sucesso!"
+
+def carregar_dados():
+    if not os.path.exists(ARQUIVO_CSV):
+        df = pd.DataFrame(columns=[
+            'ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 
+            'Descricao_Problema', 'Status', 'Prioridade', 'Aprovado_Coordenador', 'Mecanico_Responsavel'
+        ])
+        df.to_csv(ARQUIVO_CSV, index=False)
+        return df
+    df = pd.read_csv(ARQUIVO_CSV)
+    # Garante compatibilidade com colunas novas de controle de fluxo
+    for col in ['Prioridade', 'Aprovado_Coordenador', 'Mecanico_Responsavel']:
+        if col not in df.columns:
+            df[col] = 'Não' if col == 'Aprovado_Coordenador' else 'Pendente'
+    return df
+
+def salvar_dados(df):
+    df.to_csv(ARQUIVO_CSV, index=False)
+
+# GERENCIAMENTO DE SESSÃO / LOGIN
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+    st.session_state['user_info'] = None
+
+if not st.session_state['logged_in']:
+    st.title("🚛 Copa Ambiental | Login do Sistema")
     
-    if chamados_abertos.empty:
-        st.info("Nenhum chamado pendente no momento.")
-    else:
-        lista_protocolos = chamados_abertos['Protocolo'].tolist()
-        protocolo_sel = st.selectbox("Selecione a OS para atualizar:", lista_protocolos)
+    with st.form("form_login"):
+        user_input = st.text_input("Usuário")
+        password_input = st.text_input("Senha", type="password")
+        btn_login = st.form_submit_button("Entrar")
         
-        dados_os = df_chamados[df_chamados['Protocolo'] == protocolo_sel].iloc[0]
-        
-        st.subheader(f"Detalhes do Chamado: {dados_os['Protocolo']}")
-        st.write(f"**Veículo/Equipamento:** {dados_os['Modelo']} - **Placa/ID:** {dados_os['Placa']}")
-        st.write(f"**Abertura:** {dados_os['Data/Hora']}")
-        st.write(f"**Relato do Motorista:** {dados_os['Anomalia_Texto']}")
-        st.divider()
-        
-        with st.form("form_mecanico"):
-            parecer = st.text_area("Parecer do Mecânico / O que precisa ser feito:", value=dados_os['Parecer_Mecanico'])
-            previsao = st.text_input("Previsão de Conclusão (ex: 15:00 ou DD/MM):", value=dados_os['Previsao'])
-            novo_status = st.selectbox("Status da OS", ["Em Aberto", "Em Andamento", "Concluído"], 
-                                      index=["Em Aberto", "Em Andamento", "Concluído"].index(dados_os['Status']))
+        if btn_login:
+            df_users = carregar_usuarios()
+            senha_enc = hash_senha(password_input)
+            user_match = df_users[(df_users['usuario'] == user_input) & (df_users['senha'] == senha_enc)]
             
-            btn_salvar = st.form_submit_button("Salvar Atualização")
-            
-            if btn_salvar:
-                idx = df_chamados[df_chamados['Protocolo'] == protocolo_sel].index[0]
-                df_chamados.at[idx, 'Parecer_Mecanico'] = parecer
-                df_chamados.at[idx, 'Previsao'] = previsao
-                df_chamados.at[idx, 'Status'] = novo_status
-                
-                salvar_dados(df_chamados)
-                st.success(f"OS {protocolo_sel} atualizada com sucesso!")
+            if not user_match.empty:
+                st.session_state['logged_in'] = True
+                st.session_state['user_info'] = user_match.iloc[0].to_dict()
+                st.success(f"Bem-vindo, {st.session_state['user_info']['nome']}!")
                 st.rerun()
-
-# ---------------------------------------------------------
-# ABA 3: CONSULTAR CHAMADOS (COM FILTROS)
-# ---------------------------------------------------------
-elif aba == "3. Consultar Chamados":
-    st.header("📊 Consulta Geral de Chamados")
+            else:
+                st.error("Usuário ou senha incorretos.")
+else:
+    # BARRA LATERAL (Informa usuário logado e botão de sair)
+    user_data = st.session_state['user_info']
+    nivel_user = int(user_data['nivel'])
     
-    if df_chamados.empty:
-        st.info("Nenhum chamado cadastrado ainda.")
-    else:
-        st.subheader("🔍 Filtros de Busca")
-        
-        col_f1, col_f2, col_f3 = st.columns(3)
-        
-        with col_f1:
-            # Filtro de Placa/Busca por texto
-            busca_placa = st.text_input("Buscar por Placa ou Modelo:", placeholder="Digite para buscar...").strip().upper()
-            
-        with col_f2:
-            # Filtro por modelo (caixa de seleção)
-            modelos_disponiveis = ["Todos"] + sorted(list(df_chamados['Modelo'].dropna().unique()))
-            modelo_filtrado = st.selectbox("Filtrar por Equipamento:", modelos_disponiveis)
-            
-        with col_f3:
-            # Filtro por intervalo de datas
-            data_inicio = st.date_input("Data Inicial:", value=None)
-            data_fim = st.date_input("Data Final:", value=None)
+    st.sidebar.write(f"👤 **{user_data['nome']}**")
+    st.sidebar.caption(f"Nível de Acesso: {nivel_user}")
+    if st.sidebar.button("Sair / Logout"):
+        st.session_state['logged_in'] = False
+        st.session_state['user_info'] = None
+        st.rerun()
 
-        # Aplicando os filtros
-        df_exibir = df_chamados.copy()
+    # MONTAGEM DAS ABAS DE ACORDO COM O NÍVEL
+    abas_disponiveis = []
+    
+    # Nível 1, 2 e 3 acessam abertura e consulta
+    abas_disponiveis.extend(["📝 Abrir Chamado", "🔍 Consultar Chamados"])
+    
+    # Nível 3 e Nível 2 acessam Triagem do Coordenador
+    if nivel_user in [2, 3]:
+        abas_disponiveis.append("🎯 Triagem & Prioridade (Coordenador)")
         
+    # Nível 2 (Admin) e Nível 3/Mecânico acessam Manutenção
+    if nivel_user in [2]: # Pode ajustar se o mecânico for outro nível específico
+        abas_disponiveis.append("🛠️ Painel do Mecânico")
+        abas_disponiveis.append("👤 Gestão de Usuários")
+
+    aba_selecionada = st.sidebar.radio("Navegação", abas_disponiveis)
+
+    df_os = carregar_dados()
+
+    # ABA 1: ABRIR CHAMADO (Nível 1, 2, 3)
+    if aba_selecionada == "📝 Abrir Chamado":
+        st.header("Abertura de Ordem de Serviço")
+        with st.form("form_chamado", clear_on_submit=True):
+            veiculo = st.selectbox("Selecione o Veículo/Equipamento", VEICULOS)
+            placa = st.text_input("Placa / Identificação").upper()
+            descricao = st.text_area("Descrição do Defeito / Problema")
+            btn_submeter = st.form_submit_button("Enviar Chamado")
+
+            if btn_submeter:
+                if placa and descricao:
+                    novo_id = f"OS-{len(df_os) + 1001}"
+                    nova_os = {
+                        'ID_OS': novo_id,
+                        'Data': pd.Timestamp.now().strftime('%d/%m/%Y %H:%M'),
+                        'Motorista': user_data['nome'],
+                        'Veiculo': veiculo,
+                        'Placa': placa,
+                        'Descricao_Problema': descricao,
+                        'Status': 'Aguardando Aprovação',
+                        'Prioridade': 'Pendente',
+                        'Aprovado_Coordenador': 'Não',
+                        'Mecanico_Responsavel': 'Não Atribuído'
+                    }
+                    df_os = pd.concat([df_os, pd.DataFrame([nova_os])], ignore_index=True)
+                    salvar_dados(df_os)
+                    st.success(f"Chamado {novo_id} registrado com sucesso!")
+                else:
+                    st.warning("Preencha a placa e a descrição do problema.")
+
+    # ABA 2: CONSULTAR CHAMADOS (Nível 1, 2, 3)
+    elif aba_selecionada == "🔍 Consultar Chamados":
+        st.header("Consulta de Ordens de Serviço")
+        busca_placa = st.text_input("Filtrar por Placa").upper()
         if busca_placa:
-            df_exibir = df_exibir[
-                df_exibir['Placa'].str.contains(busca_placa, case=False, na=False) |
-                df_exibir['Modelo'].str.contains(busca_placa, case=False, na=False)
-            ]
-            
-        if modelo_filtrado != "Todos":
-            df_exibir = df_exibir[df_exibir['Modelo'] == modelo_filtrado]
-            
-        if data_inicio:
-            df_exibir = df_exibir[df_exibir['Data_dt'].dt.date >= data_inicio]
-            
-        if data_fim:
-            df_exibir = df_exibir[df_exibir['Data_dt'].dt.date <= data_fim]
+            st.dataframe(df_os[df_os['Placa'].str.contains(busca_placa, na=False)], use_container_width=True)
+        else:
+            st.dataframe(df_os, use_container_width=True)
 
-        # Remove a coluna técnica de data do DataFrame visual
-        df_tabela = df_exibir.drop(columns=['Data_dt'], errors='ignore')
+    # ABA 3: TRIAGEM & PRIORIDADE (Nível 3 e Nível 2)
+    elif aba_selecionada == "🎯 Triagem & Prioridade (Coordenador)":
+        st.header("Aprovação e Definição de Prioridades")
+        pendentes = df_os[df_os['Aprovado_Coordenador'] == 'Não']
+
+        if pendentes.empty:
+            st.info("Não há chamados aguardando aprovação.")
+        else:
+            for idx, row in pendentes.iterrows():
+                with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                    st.write(f"**Motorista:** {row['Motorista']}")
+                    st.write(f"**Problema:** {row['Descricao_Problema']}")
+                    
+                    prioridade = st.selectbox(f"Defina a Prioridade ({row['ID_OS']})", ["Alta", "Média", "Baixa"], key=f"prio_{row['ID_OS']}")
+                    if st.button(f"Aprovar e Enviar para Oficina ({row['ID_OS']})"):
+                        df_os.at[idx, 'Aprovado_Coordenador'] = 'Sim'
+                        df_os.at[idx, 'Prioridade'] = prioridade
+                        df_os.at[idx, 'Status'] = 'Aguardando Manutenção'
+                        salvar_dados(df_os)
+                        st.success(f"{row['ID_OS']} aprovada com sucesso!")
+                        st.rerun()
+
+    # ABA 4: PAINEL DO MECÂNICO (Nível 2)
+    elif aba_selecionada == "🛠️ Painel do Mecânico":
+        st.header("Atendimento de Oficina")
+        aprovados = df_os[df_os['Aprovado_Coordenador'] == 'Sim']
         
-        st.write(f"**Registros encontrados:** {len(df_tabela)}")
-        st.dataframe(df_tabela, width="stretch")
-        
-        # Botão para baixar apenas o resultado filtrado
-        if not df_tabela.empty:
-            df_tabela.to_excel("ordens_de_servico.xlsx", index=False)
-            with open("ordens_de_servico.xlsx", "rb") as file:
-                st.download_button(
-                    label="📥 Baixar Dados Filtrados (Excel)",
-                    data=file,
-                    file_name="ordens_de_servico.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+        if aprovados.empty:
+            st.info("Nenhuma OS aprovada na fila da oficina.")
+        else:
+            for idx, row in aprovados.iterrows():
+                with st.expander(f"[{row['Prioridade']}] {row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                    st.write(f"**Problema:** {row['Descricao_Problema']}")
+                    st.write(f"**Status Atual:** {row['Status']}")
+                    
+                    novo_status = st.selectbox(f"Atualizar Status ({row['ID_OS']})", ["Aguardando Manutenção", "Em Andamento", "Concluído"], key=f"status_{row['ID_OS']}")
+                    mecanico = st.text_input(f"Mecânico Responsável", value=row['Mecanico_Responsavel'], key=f"mec_{row['ID_OS']}")
+                    
+                    if st.button(f"Atualizar OS ({row['ID_OS']})"):
+                        df_os.at[idx, 'Status'] = novo_status
+                        df_os.at[idx, 'Mecanico_Responsavel'] = mecanico
+                        salvar_dados(df_os)
+                        st.success(f"{row['ID_OS']} atualizada!")
+                        st.rerun()
+
+    # ABA 5: GESTÃO DE USUÁRIOS (Apenas Nível 2 - Administração)
+    elif aba_selecionada == "👤 Gestão de Usuários":
+        st.header("Cadastro de Novos Usuários")
+        with st.form("form_novo_user", clear_on_submit=True):
+            nome_user = st.text_input("Nome Completo do Colaborador")
+            username = st.text_input("Nome de Usuário (Login)").lower()
+            senha_user = st.text_input("Senha Inicial", type="password")
+            nivel_acesso = st.selectbox("Nível de Acesso", [
+                "1 - Motorista (Abrir/Consultar)",
+                "2 - Administrador (Acesso Total)",
+                "3 - Coordenador (Aprovação/Prioridade)"
+            ])
+            btn_cadastrar = st.form_submit_button("Criar Usuário")
+
+            if btn_cadastrar:
+                if username and senha_user and nome_user:
+                    num_nivel = int(nivel_acesso.split(" - ")[0])
+                    sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel)
+                    if sucesso:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+                else:
+                    st.warning("Preencha todos os campos do formulário.")
+                    
+        st.subheader("Usuários Cadastrados")
+        df_u = carregar_usuarios()
+        st.dataframe(df_u[['usuario', 'nome', 'nivel']], use_container_width=True)
