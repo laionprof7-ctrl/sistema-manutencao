@@ -82,7 +82,15 @@ def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
         return True, f"Nível do usuário '{user_alvo}' atualizado para {novo_nivel}!"
     return False, "Usuário não encontrado!"
 
-def excluir_usuario(user_alvo, user_logado):
+def redefinir_senha_usuario(user_alvo, nova_senha):
+    df = carregar_usuarios()
+    if user_alvo in df['usuario'].values:
+        df.loc[df['usuario'] == user_alvo, 'senha'] = hash_senha(nova_senha)
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return True, f"Senha do usuário '{user_alvo}' alterada com sucesso!"
+    return False, "Usuário não encontrado!"
+
+def excluir_usuario(user_alvo, user_logado, nivel_editor):
     if user_alvo == user_logado:
         return False, "Você não pode excluir a sua própria conta enquanto estiver logado!"
 
@@ -92,8 +100,12 @@ def excluir_usuario(user_alvo, user_logado):
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
         nivel_user = int(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
         if nivel_user == 4:
             return False, "Usuários de Nível 4 são totalmente protegidos contra exclusão!"
+            
+        if nivel_user == 3 and int(nivel_editor) != 4:
+            return False, "Apenas usuários de Nível 4 (SuperAdmin) podem excluir um usuário de Nível 3!"
             
         df = df[df['usuario'] != user_alvo]
         df.to_csv(ARQUIVO_USUARIOS, index=False)
@@ -170,11 +182,13 @@ else:
     # MONTAGEM DAS ABAS DE ACORDO COM O NÍVEL (1, 2, 3, 4)
     abas_disponiveis = ["📝 Abrir Chamado", "🔍 Consultar Chamados"]
     
+    # Nível 2, 3 e 4 podem fazer a triagem e atualizar chamados
     if nivel_user in [2, 3, 4]:
         abas_disponiveis.append("🎯 Triagem & Prioridade (Coordenador)")
-        
-    if nivel_user in [2, 4]:
         abas_disponiveis.append("🛠️ Painel do Mecânico")
+        
+    # APENAS Nível 3 e Nível 4 podem acessar a Gestão de Usuários
+    if nivel_user in [3, 4]:
         abas_disponiveis.append("👤 Gestão de Usuários")
 
     aba_selecionada = st.sidebar.radio("Navegação", abas_disponiveis)
@@ -265,17 +279,17 @@ else:
                         st.success(f"{row['ID_OS']} atualizada!")
                         st.rerun()
 
-    # ABA 5: GESTÃO DE USUÁRIOS
+    # ABA 5: GESTÃO DE USUÁRIOS (APENAS NÍVEL 3 E 4)
     elif aba_selecionada == "👤 Gestão de Usuários":
         st.header("Gerenciamento de Usuários")
         
         col1, col2 = st.columns(2)
         
-        # Opções de níveis filtrados conforme quem está cadastrando
+        # Opções de níveis filtrados
         opcoes_nivel = [
             "1 - Motorista (Abrir/Consultar)",
-            "2 - Administrador (Acesso Total)",
-            "3 - Coordenador (Aprovação/Prioridade)"
+            "2 - Administrador / Operacional (Apenas Chamados)",
+            "3 - Coordenador (Gestão + Chamados)"
         ]
         if nivel_user == 4:
             opcoes_nivel.append("4 - SuperAdmin / Direção (Acesso Total - Protegido)")
@@ -302,9 +316,9 @@ else:
                     else:
                         st.warning("Preencha todos os campos do formulário.")
 
-        # COLUNA 2: ALTERAR NÍVEL OU EXCLUIR
+        # COLUNA 2: ALTERAR NÍVEL, MUDAR SENHA OU EXCLUIR
         with col2:
-            st.subheader("⚙️ Alterar Nível ou Excluir Usuário")
+            st.subheader("⚙️ Alterar Permissões / Senha / Excluir")
             df_u = carregar_usuarios()
             lista_usuarios = df_u['usuario'].tolist()
             
@@ -315,6 +329,7 @@ else:
                 st.write(f"**Nome:** {dados_u['nome']}")
                 st.write(f"**Nível Atual:** {dados_u['nivel']}")
                 
+                # ALTERAR NÍVEL DE ACESSO
                 with st.expander("✏️ Alterar Nível de Acesso"):
                     novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_novo_niv")
                     if st.button("Salvar Novo Nível"):
@@ -326,10 +341,25 @@ else:
                         else:
                             st.error(msg)
 
+                # ALTERAR SENHA
+                with st.expander("🔑 Redefinir Senha do Usuário"):
+                    nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
+                    if st.button("Atualizar Senha"):
+                        if nova_senha:
+                            sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha)
+                            if sucesso:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                        else:
+                            st.warning("Digite uma nova senha.")
+
+                # EXCLUIR USUÁRIO
                 with st.expander("🗑️ Excluir Usuário"):
                     st.warning(f"Tem certeza que deseja excluir o usuário '{user_selecionado}'?")
                     if st.button("Confirmar Exclusão", type="primary"):
-                        sucesso, msg = excluir_usuario(user_selecionado, usuario_atual)
+                        sucesso, msg = excluir_usuario(user_selecionado, usuario_atual, nivel_user)
                         if sucesso:
                             st.success(msg)
                             st.rerun()
