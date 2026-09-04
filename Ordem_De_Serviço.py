@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import hashlib
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Gestão de Manutenção - Copa Ambiental", page_icon="🚛", layout="wide")
 
@@ -14,7 +15,8 @@ VEICULOS = [
     "Caminhão Compactador", "Caminhão Poliguindaste", "Caminhão Roll-On",
     "Caminhão Pipa", "Caminhão Basculante", "Carregadeira",
     "Retroescavadeira", "Trator de Esteira", "Motoniveladora",
-    "Pick-up Operacional", "Van de Equipe", "Veículo Leve / Apoio"
+    "Pick-up Operacional", "Van de Equipe", "Veículo Leve / Apoio",
+    "Outros (Digitar manualmente)"
 ]
 
 # FUNÇÕES AUXILIARES PARA CRIPTOGRAFIA E USUÁRIOS
@@ -112,6 +114,30 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
         return True, f"Usuário '{user_alvo}' excluído com sucesso!"
     return False, "Usuário não encontrado!"
 
+def limpar_chamados_expirados(df):
+    if df.empty or 'Data' not in df.columns:
+        return df
+
+    agora = datetime.now()
+    indices_para_remover = []
+
+    for idx, row in df.iterrows():
+        # Verifica apenas se ainda NÃO foi aprovado pelo coordenador
+        if row.get('Aprovado_Coordenador') == 'Não':
+            try:
+                data_chamado = datetime.strptime(str(row['Data']), '%d/%m/%Y %H:%M')
+                if agora - data_chamado > timedelta(days=7):
+                    indices_para_remover.append(idx)
+            except Exception:
+                # Se houver erro de formato de data antigo, ignora a conversão para evitar erro no app
+                pass
+
+    if indices_para_remover:
+        df = df.drop(index=indices_para_remover).reset_index(drop=True)
+        salvar_dados(df)
+
+    return df
+
 def carregar_dados():
     colunas_obrigatorias = [
         'ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 
@@ -136,6 +162,9 @@ def carregar_dados():
         if col not in df.columns:
             df[col] = ''
             
+    # Executa a limpeza automática de chamados expirados (não aprovados há +7 dias)
+    df = limpar_chamados_expirados(df)
+
     return df
 
 def salvar_dados(df):
@@ -199,19 +228,29 @@ else:
     if aba_selecionada == "📝 Abrir Chamado":
         st.header("Abertura de Ordem de Serviço")
         with st.form("form_chamado", clear_on_submit=True):
-            veiculo = st.selectbox("Selecione o Veículo/Equipamento", VEICULOS)
+            veiculo_sel = st.selectbox("Selecione o Veículo/Equipamento", VEICULOS)
+            
+            # Campo extra para digitação manual caso selecione "Outros"
+            outros_veiculo = ""
+            if veiculo_sel == "Outros (Digitar manualmente)":
+                outros_veiculo = st.text_input("Especifique o Veículo/Equipamento")
+                
             placa = st.text_input("Placa / Identificação").upper()
             descricao = st.text_area("Descrição do Defeito / Problema")
             btn_submeter = st.form_submit_button("Enviar Chamado")
 
             if btn_submeter:
-                if placa and descricao:
+                veiculo_final = outros_veiculo if veiculo_sel == "Outros (Digitar manualmente)" else veiculo_sel
+                
+                if veiculo_sel == "Outros (Digitar manualmente)" and not outros_veiculo.strip():
+                    st.warning("Por favor, especifique o nome do veículo/equipamento no campo indicado.")
+                elif placa and descricao:
                     novo_id = f"OS-{len(df_os) + 1001}"
                     nova_os = {
                         'ID_OS': novo_id,
                         'Data': pd.Timestamp.now().strftime('%d/%m/%Y %H:%M'),
                         'Motorista': user_data['nome'],
-                        'Veiculo': veiculo,
+                        'Veiculo': veiculo_final,
                         'Placa': placa,
                         'Descricao_Problema': descricao,
                         'Status': 'Aguardando Aprovação',
@@ -229,10 +268,16 @@ else:
     elif aba_selecionada == "🔍 Consultar Chamados":
         st.header("Consulta de Ordens de Serviço")
         busca_placa = st.text_input("Filtrar por Placa").upper()
+        
+        # Filtro de colunas para Usuário Nível 1
+        df_exibicao = df_os.copy()
+        if nivel_user == 1 and 'Aprovado_Coordenador' in df_exibicao.columns:
+            df_exibicao = df_exibicao.drop(columns=['Aprovado_Coordenador'])
+
         if busca_placa:
-            st.dataframe(df_os[df_os['Placa'].astype(str).str.contains(busca_placa, na=False)], use_container_width=True)
+            st.dataframe(df_exibicao[df_exibicao['Placa'].astype(str).str.contains(busca_placa, na=False)], use_container_width=True)
         else:
-            st.dataframe(df_os, use_container_width=True)
+            st.dataframe(df_exibicao, use_container_width=True)
 
     # ABA 3: TRIAGEM & PRIORIDADE
     elif aba_selecionada == "🎯 Triagem & Prioridade (Coordenador)":
@@ -245,6 +290,7 @@ else:
             for idx, row in pendentes.iterrows():
                 with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
                     st.write(f"**Motorista:** {row['Motorista']}")
+                    st.write(f"**Data da Abertura:** {row['Data']}")
                     st.write(f"**Problema:** {row['Descricao_Problema']}")
                     
                     prioridade = st.selectbox(f"Defina a Prioridade ({row['ID_OS']})", ["Alta", "Média", "Baixa"], key=f"prio_{row['ID_OS']}")
