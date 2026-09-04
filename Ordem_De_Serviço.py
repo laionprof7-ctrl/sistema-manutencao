@@ -65,21 +65,27 @@ def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
     df.to_csv(ARQUIVO_USUARIOS, index=False)
     return True, "Usuário cadastrado com sucesso!"
 
-def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor):
+def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
+    if user_alvo == user_logado:
+        return False, "Você não pode alterar o seu próprio nível de acesso!"
+
     if int(novo_nivel) == 4 and int(nivel_editor) != 4:
         return False, "Apenas o SuperAdmin (Nível 4) pode promover usuários ao Nível 4!"
         
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
         if user_alvo == 'laion':
-            return False, "O usuário 'laion' é o SuperAdmin e seu nível não pode ser alterado!"
+            return False, "O usuário principal 'laion' tem seu nível protegido e não pode ser alterado!"
             
         df.loc[df['usuario'] == user_alvo, 'nivel'] = int(novo_nivel)
         df.to_csv(ARQUIVO_USUARIOS, index=False)
         return True, f"Nível do usuário '{user_alvo}' atualizado para {novo_nivel}!"
     return False, "Usuário não encontrado!"
 
-def excluir_usuario(user_alvo):
+def excluir_usuario(user_alvo, user_logado):
+    if user_alvo == user_logado:
+        return False, "Você não pode excluir a sua própria conta enquanto estiver logado!"
+
     if user_alvo in ['laion', 'admin']:
         return False, f"O usuário principal '{user_alvo}' está protegido e não pode ser excluído!"
     
@@ -87,7 +93,7 @@ def excluir_usuario(user_alvo):
     if user_alvo in df['usuario'].values:
         nivel_user = int(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
         if nivel_user == 4:
-            return False, "Usuários de Nível 4 são protegidos e não podem ser excluídos!"
+            return False, "Usuários de Nível 4 são totalmente protegidos contra exclusão!"
             
         df = df[df['usuario'] != user_alvo]
         df.to_csv(ARQUIVO_USUARIOS, index=False)
@@ -152,6 +158,7 @@ else:
     # BARRA LATERAL
     user_data = st.session_state['user_info']
     nivel_user = int(user_data['nivel'])
+    usuario_atual = str(user_data['usuario'])
     
     st.sidebar.write(f"👤 **{user_data['nome']}**")
     st.sidebar.caption(f"Nível de Acesso: {nivel_user}")
@@ -312,7 +319,7 @@ else:
                     novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_novo_niv")
                     if st.button("Salvar Novo Nível"):
                         num_n = int(novo_niv.split(" - ")[0])
-                        sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user)
+                        sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
                         if sucesso:
                             st.success(msg)
                             st.rerun()
@@ -322,7 +329,7 @@ else:
                 with st.expander("🗑️ Excluir Usuário"):
                     st.warning(f"Tem certeza que deseja excluir o usuário '{user_selecionado}'?")
                     if st.button("Confirmar Exclusão", type="primary"):
-                        sucesso, msg = excluir_usuario(user_selecionado)
+                        sucesso, msg = excluir_usuario(user_selecionado, usuario_atual)
                         if sucesso:
                             st.success(msg)
                             st.rerun()
