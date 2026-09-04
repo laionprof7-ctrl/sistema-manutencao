@@ -24,16 +24,33 @@ def hash_senha(senha):
 def carregar_usuarios():
     if not os.path.exists(ARQUIVO_USUARIOS):
         df = pd.DataFrame([{
-            'usuario': 'admin',
-            'senha': hash_senha('admin123'),
-            'nome': 'Administrador Geral',
+            'usuario': 'laion',
+            'senha': hash_senha('@Laion2004lima'),
+            'nome': 'Laion (SuperAdmin)',
             'nivel': 4
         }])
         df.to_csv(ARQUIVO_USUARIOS, index=False)
         return df
-    return pd.read_csv(ARQUIVO_USUARIOS)
+    
+    df = pd.read_csv(ARQUIVO_USUARIOS)
+    
+    # Garantia de que o usuário 'laion' sempre exista e esteja no nível 4
+    if 'laion' not in df['usuario'].values:
+        novo_laion = pd.DataFrame([{
+            'usuario': 'laion',
+            'senha': hash_senha('@Laion2004lima'),
+            'nome': 'Laion (SuperAdmin)',
+            'nivel': 4
+        }])
+        df = pd.concat([df, novo_laion], ignore_index=True)
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        
+    return df
 
-def salvar_usuario(novo_user, nova_senha, nome, nivel):
+def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
+    if int(nivel) == 4 and int(nivel_criador) != 4:
+        return False, "Apenas usuários Nível 4 (SuperAdmin) podem criar outros usuários Nível 4!"
+        
     df = carregar_usuarios()
     if novo_user in df['usuario'].values:
         return False, "Usuário já existe!"
@@ -48,21 +65,23 @@ def salvar_usuario(novo_user, nova_senha, nome, nivel):
     df.to_csv(ARQUIVO_USUARIOS, index=False)
     return True, "Usuário cadastrado com sucesso!"
 
-def atualizar_nivel_usuario(user_alvo, novo_nivel):
+def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor):
+    if int(novo_nivel) == 4 and int(nivel_editor) != 4:
+        return False, "Apenas o SuperAdmin (Nível 4) pode promover usuários ao Nível 4!"
+        
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
-        nivel_atual = int(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
-        if nivel_atual == 4:
-            return False, "Usuários Nível 4 são protegidos e não podem ter seu nível alterado!"
-        
+        if user_alvo == 'laion':
+            return False, "O usuário 'laion' é o SuperAdmin e seu nível não pode ser alterado!"
+            
         df.loc[df['usuario'] == user_alvo, 'nivel'] = int(novo_nivel)
         df.to_csv(ARQUIVO_USUARIOS, index=False)
         return True, f"Nível do usuário '{user_alvo}' atualizado para {novo_nivel}!"
     return False, "Usuário não encontrado!"
 
 def excluir_usuario(user_alvo):
-    if user_alvo == 'admin':
-        return False, "O usuário principal 'admin' não pode ser excluído!"
+    if user_alvo in ['laion', 'admin']:
+        return False, f"O usuário principal '{user_alvo}' está protegido e não pode ser excluído!"
     
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
@@ -113,7 +132,7 @@ if not st.session_state['logged_in']:
     st.title("🚛 Copa Ambiental | Login do Sistema")
     
     with st.form("form_login"):
-        user_input = st.text_input("Usuário")
+        user_input = st.text_input("Usuário").strip().lower()
         password_input = st.text_input("Senha", type="password")
         btn_login = st.form_submit_button("Entrar")
         
@@ -144,11 +163,9 @@ else:
     # MONTAGEM DAS ABAS DE ACORDO COM O NÍVEL (1, 2, 3, 4)
     abas_disponiveis = ["📝 Abrir Chamado", "🔍 Consultar Chamados"]
     
-    # Nível 2, 3 e 4 acessam Triagem do Coordenador
     if nivel_user in [2, 3, 4]:
         abas_disponiveis.append("🎯 Triagem & Prioridade (Coordenador)")
         
-    # Nível 2 e 4 acessam Mecânico e Gestão de Usuários
     if nivel_user in [2, 4]:
         abas_disponiveis.append("🛠️ Painel do Mecânico")
         abas_disponiveis.append("👤 Gestão de Usuários")
@@ -247,6 +264,15 @@ else:
         
         col1, col2 = st.columns(2)
         
+        # Opções de níveis filtrados conforme quem está cadastrando
+        opcoes_nivel = [
+            "1 - Motorista (Abrir/Consultar)",
+            "2 - Administrador (Acesso Total)",
+            "3 - Coordenador (Aprovação/Prioridade)"
+        ]
+        if nivel_user == 4:
+            opcoes_nivel.append("4 - SuperAdmin / Direção (Acesso Total - Protegido)")
+        
         # COLUNA 1: CADASTRAR NOVO USUÁRIO
         with col1:
             st.subheader("➕ Cadastrar Novo Usuário")
@@ -254,18 +280,13 @@ else:
                 nome_user = st.text_input("Nome Completo do Colaborador")
                 username = st.text_input("Nome de Usuário (Login)").lower()
                 senha_user = st.text_input("Senha Inicial", type="password")
-                nivel_acesso = st.selectbox("Nível de Acesso", [
-                    "1 - Motorista (Abrir/Consultar)",
-                    "2 - Administrador (Acesso Total)",
-                    "3 - Coordenador (Aprovação/Prioridade)",
-                    "4 - SuperAdmin / Direção (Acesso Total - Protegido)"
-                ])
+                nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
                 btn_cadastrar = st.form_submit_button("Criar Usuário")
 
                 if btn_cadastrar:
                     if username and senha_user and nome_user:
                         num_nivel = int(nivel_acesso.split(" - ")[0])
-                        sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel)
+                        sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
                         if sucesso:
                             st.success(msg)
                             st.rerun()
@@ -288,15 +309,10 @@ else:
                 st.write(f"**Nível Atual:** {dados_u['nivel']}")
                 
                 with st.expander("✏️ Alterar Nível de Acesso"):
-                    novo_niv = st.selectbox("Novo Nível", [
-                        "1 - Motorista (Abrir/Consultar)",
-                        "2 - Administrador (Acesso Total)",
-                        "3 - Coordenador (Aprovação/Prioridade)",
-                        "4 - SuperAdmin / Direção (Acesso Total - Protegido)"
-                    ], key="sel_novo_niv")
+                    novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_novo_niv")
                     if st.button("Salvar Novo Nível"):
                         num_n = int(novo_niv.split(" - ")[0])
-                        sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n)
+                        sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user)
                         if sucesso:
                             st.success(msg)
                             st.rerun()
