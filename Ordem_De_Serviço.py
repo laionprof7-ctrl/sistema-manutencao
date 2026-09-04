@@ -36,7 +36,6 @@ def carregar_usuarios():
     
     df = pd.read_csv(ARQUIVO_USUARIOS)
     
-    # Garantia de que o usuário 'laion' sempre exista e esteja no nível 4
     if 'laion' not in df['usuario'].values:
         novo_laion = pd.DataFrame([{
             'usuario': 'laion',
@@ -115,23 +114,17 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
     return False, "Usuário não encontrado!"
 
 def limpar_chamados_expirados(df):
-    if df.empty:
-        return df
-
-    # Identifica a coluna de data equivalente
-    col_data = 'Data' if 'Data' in df.columns else ('Data/Hora' if 'Data/Hora' in df.columns else None)
-    if not col_data:
+    if df.empty or 'Data' not in df.columns:
         return df
 
     agora = datetime.now()
     indices_para_remover = []
 
     for idx, row in df.iterrows():
-        # Checa status de aprovação
         aprovado = str(row.get('Aprovado_Coordenador', 'Não')).strip()
         if aprovado == 'Não':
             try:
-                data_chamado = datetime.strptime(str(row[col_data]), '%d/%m/%Y %H:%M')
+                data_chamado = datetime.strptime(str(row['Data']), '%d/%m/%Y %H:%M')
                 if agora - data_chamado > timedelta(days=7):
                     indices_para_remover.append(idx)
             except Exception:
@@ -156,6 +149,20 @@ def carregar_dados():
     
     df = pd.read_csv(ARQUIVO_CSV)
     
+    # UNIFICAÇÃO DE COLUNAS (ANTIGAS -> NOVAS)
+    mapeamento = {
+        'Protocolo': 'ID_OS',
+        'Data/Hora': 'Data',
+        'Modelo': 'Veiculo',
+        'Anamalia_Texto': 'Descricao_Problema'
+    }
+    
+    for antiga, nova in mapeamento.items():
+        if antiga in df.columns:
+            if nova not in df.columns or df[nova].isnull().all():
+                df[nova] = df[antiga]
+            df.drop(columns=[antiga], inplace=True)
+
     if 'Aprovado_Coordenador' not in df.columns:
         df['Aprovado_Coordenador'] = 'Sim'
     if 'Prioridade' not in df.columns:
@@ -164,10 +171,11 @@ def carregar_dados():
         df['Mecanico_Responsavel'] = 'Não Atribuído'
         
     for col in colunas_obrigatorias:
-        if col not in df.columns and col not in ['Protocolo', 'Data/Hora', 'Modelo', 'Anamalia_Texto']:
+        if col not in df.columns:
             df[col] = ''
             
     df = limpar_chamados_expirados(df)
+    salvar_dados(df)
 
     return df
 
@@ -212,7 +220,6 @@ else:
         st.session_state['user_info'] = None
         st.rerun()
 
-    # MONTAGEM DAS ABAS DE ACORDO COM O NÍVEL (1, 2, 3, 4)
     abas_disponiveis = ["📝 Abrir Chamado", "🔍 Consultar Chamados"]
     
     if nivel_user in [2, 3, 4]:
@@ -272,24 +279,19 @@ else:
         
         df_exibicao = df_os.copy()
         
-        # Filtro estrito de colunas para Usuário Nível 1
+        # Filtro estrito: Apenas identificação do veículo, Nº OS, Data, Descrição e Status
+        colunas_motorista = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
+        
         if nivel_user == 1:
-            colunas_permitidas = [
-                'ID_OS', 'Protocolo', 
-                'Data', 'Data/Hora', 
-                'Veiculo', 'Modelo', 
-                'Placa', 
-                'Descricao_Problema', 'Anamalia_Texto', 
-                'Status'
-            ]
-            cols_existentes = [c for c in df_exibicao.columns if c in colunas_permitidas]
-            df_exibicao = df_exibicao[cols_existentes]
+            df_exibicao = df_exibicao[colunas_motorista]
+            # Renomeia para exibição mais amigável na tela
+            df_exibicao.columns = ['Nº da OS', 'Data de Registro', 'Veículo / Equipamento', 'Placa', 'Descrição do Problema', 'Status']
 
         # Busca por Placa
         if busca_placa:
-            col_placa = 'Placa' if 'Placa' in df_exibicao.columns else ('placa' if 'placa' in df_exibicao.columns else None)
-            if col_placa:
-                st.dataframe(df_exibicao[df_exibicao[col_placa].astype(str).str.contains(busca_placa, na=False)], use_container_width=True)
+            col_busca = 'Placa' if 'Placa' in df_exibicao.columns else 'Placa'
+            if col_busca in df_exibicao.columns:
+                st.dataframe(df_exibicao[df_exibicao[col_busca].astype(str).str.contains(busca_placa, na=False)], use_container_width=True)
             else:
                 st.dataframe(df_exibicao, use_container_width=True)
         else:
@@ -304,23 +306,17 @@ else:
             st.info("Não há chamados aguardando aprovação.")
         else:
             for idx, row in pendentes.iterrows():
-                id_exibir = row.get('Protocolo', row.get('ID_OS', f"OS-{idx}"))
-                veiculo_exibir = row.get('Modelo', row.get('Veiculo', 'Veículo'))
-                placa_exibir = row.get('Placa', '')
-                desc_exibir = row.get('Anamalia_Texto', row.get('Descricao_Problema', ''))
-                data_exibir = row.get('Data/Hora', row.get('Data', ''))
-
-                with st.expander(f"{id_exibir} - {veiculo_exibir} ({placa_exibir})"):
-                    st.write(f"**Data da Abertura:** {data_exibir}")
-                    st.write(f"**Problema:** {desc_exibir}")
+                with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                    st.write(f"**Data da Abertura:** {row['Data']}")
+                    st.write(f"**Problema:** {row['Descricao_Problema']}")
                     
-                    prioridade = st.selectbox(f"Defina a Prioridade ({id_exibir})", ["Alta", "Média", "Baixa"], key=f"prio_{idx}")
-                    if st.button(f"Aprovar e Enviar para Oficina ({id_exibir})", key=f"btn_aprov_{idx}"):
+                    prioridade = st.selectbox(f"Defina a Prioridade ({row['ID_OS']})", ["Alta", "Média", "Baixa"], key=f"prio_{idx}")
+                    if st.button(f"Aprovar e Enviar para Oficina ({row['ID_OS']})", key=f"btn_aprov_{idx}"):
                         df_os.at[idx, 'Aprovado_Coordenador'] = 'Sim'
                         df_os.at[idx, 'Prioridade'] = prioridade
                         df_os.at[idx, 'Status'] = 'Aguardando Manutenção'
                         salvar_dados(df_os)
-                        st.success(f"{id_exibir} aprovada com sucesso!")
+                        st.success(f"{row['ID_OS']} aprovada com sucesso!")
                         st.rerun()
 
     # ABA 4: PAINEL DO MECÂNICO
@@ -332,26 +328,18 @@ else:
             st.info("Nenhuma OS aprovada na fila da oficina.")
         else:
             for idx, row in aprovados.iterrows():
-                id_exibir = row.get('Protocolo', row.get('ID_OS', f"OS-{idx}"))
-                veiculo_exibir = row.get('Modelo', row.get('Veiculo', 'Veículo'))
-                placa_exibir = row.get('Placa', '')
-                desc_exibir = row.get('Anamalia_Texto', row.get('Descricao_Problema', ''))
-                prio_exibir = row.get('Prioridade', 'Média')
-                status_exibir = row.get('Status', 'Em Andamento')
-                mec_exibir = row.get('Mecanico_Responsavel', 'Não Atribuído')
-
-                with st.expander(f"[{prio_exibir}] {id_exibir} - {veiculo_exibir} ({placa_exibir})"):
-                    st.write(f"**Problema:** {desc_exibir}")
-                    st.write(f"**Status Atual:** {status_exibir}")
+                with st.expander(f"[{row['Prioridade']}] {row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                    st.write(f"**Problema:** {row['Descricao_Problema']}")
+                    st.write(f"**Status Atual:** {row['Status']}")
                     
-                    novo_status = st.selectbox(f"Atualizar Status ({id_exibir})", ["Aguardando Manutenção", "Em Andamento", "Concluído"], key=f"status_{idx}")
-                    mecanico = st.text_input(f"Mecânico Responsável", value=mec_exibir, key=f"mec_{idx}")
+                    novo_status = st.selectbox(f"Atualizar Status ({row['ID_OS']})", ["Aguardando Manutenção", "Em Andamento", "Concluído"], key=f"status_{idx}")
+                    mecanico = st.text_input(f"Mecânico Responsável", value=row['Mecanico_Responsavel'], key=f"mec_{idx}")
                     
-                    if st.button(f"Atualizar OS ({id_exibir})", key=f"btn_mec_{idx}"):
+                    if st.button(f"Atualizar OS ({row['ID_OS']})", key=f"btn_mec_{idx}"):
                         df_os.at[idx, 'Status'] = novo_status
                         df_os.at[idx, 'Mecanico_Responsavel'] = mecanico
                         salvar_dados(df_os)
-                        st.success(f"{id_exibir} atualizada!")
+                        st.success(f"{row['ID_OS']} atualizada!")
                         st.rerun()
 
     # ABA 5: GESTÃO DE USUÁRIOS (APENAS NÍVEL 3 E 4)
