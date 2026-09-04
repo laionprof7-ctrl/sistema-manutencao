@@ -28,19 +28,22 @@ def carregar_usuarios():
             'usuario': 'laion',
             'senha': hash_senha('@Laion2004lima'),
             'nome': 'Laion (SuperAdmin)',
-            'nivel': 4
+            'nivel': 4.0
         }])
         df.to_csv(ARQUIVO_USUARIOS, index=False)
         return df
     
     df = pd.read_csv(ARQUIVO_USUARIOS)
     
+    # Garantir que a coluna nivel seja float para suportar 3.5 (Nível 3+)
+    df['nivel'] = df['nivel'].astype(float)
+    
     if 'laion' not in df['usuario'].values:
         novo_laion = pd.DataFrame([{
             'usuario': 'laion',
             'senha': hash_senha('@Laion2004lima'),
             'nome': 'Laion (SuperAdmin)',
-            'nivel': 4
+            'nivel': 4.0
         }])
         df = pd.concat([df, novo_laion], ignore_index=True)
         df.to_csv(ARQUIVO_USUARIOS, index=False)
@@ -48,8 +51,8 @@ def carregar_usuarios():
     return df
 
 def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
-    if int(nivel) == 4 and int(nivel_criador) != 4:
-        return False, "Apenas usuários Nível 4 (SuperAdmin) podem criar outros usuários Nível 4!"
+    if float(nivel) >= 3.5 and float(nivel_criador) < 4.0:
+        return False, "Apenas o SuperAdmin (Nível 4) pode criar usuários Nível 3+ ou Nível 4!"
         
     df = carregar_usuarios()
     if novo_user in df['usuario'].values:
@@ -59,7 +62,7 @@ def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
         'usuario': novo_user,
         'senha': hash_senha(nova_senha),
         'nome': nome,
-        'nivel': int(nivel)
+        'nivel': float(nivel)
     }])
     df = pd.concat([df, novo_df], ignore_index=True)
     df.to_csv(ARQUIVO_USUARIOS, index=False)
@@ -69,22 +72,34 @@ def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
     if user_alvo == user_logado:
         return False, "Você não pode alterar o seu próprio nível de acesso!"
 
-    if int(novo_nivel) == 4 and int(nivel_editor) != 4:
-        return False, "Apenas o SuperAdmin (Nível 4) pode promover usuários ao Nível 4!"
-        
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
         if user_alvo == 'laion':
             return False, "O usuário principal 'laion' tem seu nível protegido e não pode ser alterado!"
             
-        df.loc[df['usuario'] == user_alvo, 'nivel'] = int(novo_nivel)
+        nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
+        # Validação de Hierarquia de Edição
+        if float(nivel_editor) < 4.0:
+            if nivel_alvo >= 3.5:
+                return False, "Você não tem permissão para alterar o nível deste usuário!"
+            if float(novo_nivel) >= 3.5:
+                return False, "Apenas o SuperAdmin (Nível 4) pode promover usuários para Nível 3+ ou Nível 4!"
+            
+        df.loc[df['usuario'] == user_alvo, 'nivel'] = float(novo_nivel)
         df.to_csv(ARQUIVO_USUARIOS, index=False)
-        return True, f"Nível do usuário '{user_alvo}' atualizado para {novo_nivel}!"
+        return True, f"Nível do usuário '{user_alvo}' atualizado com sucesso!"
     return False, "Usuário não encontrado!"
 
-def redefinir_senha_usuario(user_alvo, nova_senha):
+def redefinir_senha_usuario(user_alvo, nova_senha, nivel_editor, user_logado):
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
+        nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
+        # Nível 3+ e Nível 3 só alteram senha de usuários estritamente inferiores
+        if float(nivel_editor) < 4.0 and nivel_alvo >= float(nivel_editor):
+            return False, "Você não tem permissão para alterar a senha de usuários com nível igual ou superior ao seu!"
+
         df.loc[df['usuario'] == user_alvo, 'senha'] = hash_senha(nova_senha)
         df.to_csv(ARQUIVO_USUARIOS, index=False)
         return True, f"Senha do usuário '{user_alvo}' alterada com sucesso!"
@@ -99,13 +114,17 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
     
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
-        nivel_user = int(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
         
-        if nivel_user == 4:
+        # Regras de Exclusão
+        if nivel_alvo == 4.0:
             return False, "Usuários de Nível 4 são totalmente protegidos contra exclusão!"
             
-        if nivel_user == 3 and int(nivel_editor) != 4:
-            return False, "Apenas usuários de Nível 4 (SuperAdmin) podem excluir um usuário de Nível 3!"
+        if float(nivel_editor) < 4.0:
+            if float(nivel_editor) == 3.5 and nivel_alvo >= 3.5:
+                return False, "Usuários Nível 3+ só podem excluir usuários inferiores (Nível 1, 2 e 3)!"
+            elif float(nivel_editor) == 3.0:
+                return False, "Apenas usuários de Nível 3+ ou Nível 4 podem excluir contas de colaboradores!"
             
         df = df[df['usuario'] != user_alvo]
         df.to_csv(ARQUIVO_USUARIOS, index=False)
@@ -211,11 +230,13 @@ if not st.session_state['logged_in']:
 else:
     # BARRA LATERAL
     user_data = st.session_state['user_info']
-    nivel_user = int(user_data['nivel'])
+    nivel_user = float(user_data['nivel'])
     usuario_atual = str(user_data['usuario'])
     
     st.sidebar.write(f"👤 **{user_data['nome']}**")
-    st.sidebar.caption(f"Nível de Acesso: {nivel_user}")
+    lbl_nivel = "3+" if nivel_user == 3.5 else str(int(nivel_user))
+    st.sidebar.caption(f"Nível de Acesso: {lbl_nivel}")
+    
     if st.sidebar.button("Sair / Logout"):
         st.session_state['logged_in'] = False
         st.session_state['user_info'] = None
@@ -223,11 +244,11 @@ else:
 
     abas_disponiveis = ["📝 Abrir Chamado", "🔍 Consultar Chamados"]
     
-    if nivel_user in [2, 3, 4]:
+    if nivel_user >= 2.0:
         abas_disponiveis.append("🎯 Triagem & Prioridade (Coordenador)")
         abas_disponiveis.append("🛠️ Painel do Mecânico")
         
-    if nivel_user in [3, 4]:
+    if nivel_user >= 3.0:
         abas_disponiveis.append("👤 Gestão de Usuários")
 
     aba_selecionada = st.sidebar.radio("Navegação", abas_disponiveis)
@@ -290,12 +311,11 @@ else:
         df_exibicao = df_os.copy()
         
         # Filtro de Colunas de acordo com o Nível de Acesso
-        if nivel_user == 1:
+        if nivel_user == 1.0:
             colunas_nivel_1 = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
             df_exibicao = df_exibicao[colunas_nivel_1]
             df_exibicao.columns = ['Nº da OS', 'Data de Registro', 'Veículo / Equipamento', 'Placa', 'Descrição do Problema', 'Status']
         else:
-            # Nível 2, 3 e 4 visualizam o nome de quem abriu o chamado (Motorista/Solicitante)
             colunas_gestao = ['ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status', 'Prioridade', 'Mecanico_Responsavel']
             df_exibicao = df_exibicao[colunas_gestao]
             df_exibicao.columns = ['Nº da OS', 'Data de Registro', 'Aberto por (Solicitante)', 'Veículo / Equipamento', 'Placa', 'Descrição do Problema', 'Status', 'Prioridade', 'Mecânico']
@@ -356,18 +376,21 @@ else:
                         st.success(f"{row['ID_OS']} atualizada!")
                         st.rerun()
 
-    # ABA 5: GESTÃO DE USUÁRIOS (APENAS NÍVEL 3 E 4)
+    # ABA 5: GESTÃO DE USUÁRIOS (NÍVEIS 3, 3+ E 4)
     elif aba_selecionada == "👤 Gestão de Usuários":
         st.header("Gerenciamento de Usuários")
         
         col1, col2 = st.columns(2)
         
+        # Mapeamento e Lista de Opções de Nível
         opcoes_nivel = [
             "1 - Motorista (Abrir/Consultar)",
             "2 - Administrador / Operacional (Apenas Chamados)",
             "3 - Coordenador (Gestão + Chamados)"
         ]
-        if nivel_user == 4:
+        
+        if nivel_user == 4.0:
+            opcoes_nivel.append("3.5 - Coordenador Plus (Gestão Completa de Usuários Inferiores)")
             opcoes_nivel.append("4 - SuperAdmin / Direção (Acesso Total - Protegido)")
         
         # COLUNA 1: CADASTRAR NOVO USUÁRIO
@@ -382,7 +405,7 @@ else:
 
                 if btn_cadastrar:
                     if username and senha_user and nome_user:
-                        num_nivel = int(nivel_acesso.split(" - ")[0])
+                        num_nivel = float(nivel_acesso.split(" - ")[0])
                         sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
                         if sucesso:
                             st.success(msg)
@@ -402,14 +425,17 @@ else:
             
             if user_selecionado:
                 dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
+                niv_u_val = float(dados_u['nivel'])
+                niv_str = "3+" if niv_u_val == 3.5 else str(int(niv_u_val)) if niv_u_val.is_integer() else str(niv_u_val)
+                
                 st.write(f"**Nome:** {dados_u['nome']}")
-                st.write(f"**Nível Atual:** {dados_u['nivel']}")
+                st.write(f"**Nível Atual:** {niv_str}")
                 
                 # ALTERAR NÍVEL DE ACESSO
                 with st.expander("✏️ Alterar Nível de Acesso"):
                     novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_novo_niv")
                     if st.button("Salvar Novo Nível"):
-                        num_n = int(novo_niv.split(" - ")[0])
+                        num_n = float(novo_niv.split(" - ")[0])
                         sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
                         if sucesso:
                             st.success(msg)
@@ -422,7 +448,7 @@ else:
                     nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
                     if st.button("Atualizar Senha"):
                         if nova_senha:
-                            sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha)
+                            sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
                             if sucesso:
                                 st.success(msg)
                                 st.rerun()
@@ -444,4 +470,6 @@ else:
 
         st.markdown("---")
         st.subheader("📋 Usuários Cadastrados")
-        st.dataframe(df_u[['usuario', 'nome', 'nivel']], use_container_width=True)
+        df_u_exibicao = df_u[['usuario', 'nome', 'nivel']].copy()
+        df_u_exibicao['nivel'] = df_u_exibicao['nivel'].apply(lambda x: '3+' if float(x) == 3.5 else str(int(x)) if float(x).is_integer() else str(x))
+        st.dataframe(df_u_exibicao, use_container_width=True)
