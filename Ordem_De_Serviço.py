@@ -48,6 +48,25 @@ def salvar_usuario(novo_user, nova_senha, nome, nivel):
     df.to_csv(ARQUIVO_USUARIOS, index=False)
     return True, "Usuário cadastrado com sucesso!"
 
+def atualizar_nivel_usuario(user_alvo, novo_nivel):
+    df = carregar_usuarios()
+    if user_alvo in df['usuario'].values:
+        df.loc[df['usuario'] == user_alvo, 'nivel'] = int(novo_nivel)
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return True, f"Nível do usuário '{user_alvo}' atualizado para {novo_nivel}!"
+    return False, "Usuário não encontrado!"
+
+def excluir_usuario(user_alvo):
+    if user_alvo == 'admin':
+        return False, "O usuário principal 'admin' não pode ser excluído!"
+    
+    df = carregar_usuarios()
+    if user_alvo in df['usuario'].values:
+        df = df[df['usuario'] != user_alvo]
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return True, f"Usuário '{user_alvo}' excluído com sucesso!"
+    return False, "Usuário não encontrado!"
+
 def carregar_dados():
     colunas_obrigatorias = [
         'ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 
@@ -61,9 +80,8 @@ def carregar_dados():
     
     df = pd.read_csv(ARQUIVO_CSV)
     
-    # Garante que todas as colunas necessárias existam no DataFrame carregado
     if 'Aprovado_Coordenador' not in df.columns:
-        df['Aprovado_Coordenador'] = 'Sim'  # Marca antigos como já aprovados
+        df['Aprovado_Coordenador'] = 'Sim'
     if 'Prioridade' not in df.columns:
         df['Prioridade'] = 'Média'
     if 'Mecanico_Responsavel' not in df.columns:
@@ -215,29 +233,74 @@ else:
 
     # ABA 5: GESTÃO DE USUÁRIOS
     elif aba_selecionada == "👤 Gestão de Usuários":
-        st.header("Cadastro de Novos Usuários")
-        with st.form("form_novo_user", clear_on_submit=True):
-            nome_user = st.text_input("Nome Completo do Colaborador")
-            username = st.text_input("Nome de Usuário (Login)").lower()
-            senha_user = st.text_input("Senha Inicial", type="password")
-            nivel_acesso = st.selectbox("Nível de Acesso", [
-                "1 - Motorista (Abrir/Consultar)",
-                "2 - Administrador (Acesso Total)",
-                "3 - Coordenador (Aprovação/Prioridade)"
-            ])
-            btn_cadastrar = st.form_submit_button("Criar Usuário")
+        st.header("Gerenciamento de Usuários")
+        
+        col1, col2 = st.columns(2)
+        
+        # COLUNA 1: CADASTRAR NOVO USUÁRIO
+        with col1:
+            st.subheader("➕ Cadastrar Novo Usuário")
+            with st.form("form_novo_user", clear_on_submit=True):
+                nome_user = st.text_input("Nome Completo do Colaborador")
+                username = st.text_input("Nome de Usuário (Login)").lower()
+                senha_user = st.text_input("Senha Inicial", type="password")
+                nivel_acesso = st.selectbox("Nível de Acesso", [
+                    "1 - Motorista (Abrir/Consultar)",
+                    "2 - Administrador (Acesso Total)",
+                    "3 - Coordenador (Aprovação/Prioridade)"
+                ])
+                btn_cadastrar = st.form_submit_button("Criar Usuário")
 
-            if btn_cadastrar:
-                if username and senha_user and nome_user:
-                    num_nivel = int(nivel_acesso.split(" - ")[0])
-                    sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel)
-                    if sucesso:
-                        st.success(msg)
+                if btn_cadastrar:
+                    if username and senha_user and nome_user:
+                        num_nivel = int(nivel_acesso.split(" - ")[0])
+                        sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel)
+                        if sucesso:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
                     else:
-                        st.error(msg)
-                else:
-                    st.warning("Preencha todos os campos do formulário.")
-                    
-        st.subheader("Usuários Cadastrados")
-        df_u = carregar_usuarios()
+                        st.warning("Preencha todos os campos do formulário.")
+
+        # COLUNA 2: ALTERAR NÍVEL OU EXCLUIR
+        with col2:
+            st.subheader("⚙️ Alterar Nível ou Excluir Usuário")
+            df_u = carregar_usuarios()
+            lista_usuarios = df_u['usuario'].tolist()
+            
+            user_selecionado = st.selectbox("Selecione o Usuário", lista_usuarios)
+            
+            if user_selecionado:
+                dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
+                st.write(f"**Nome:** {dados_u['nome']}")
+                st.write(f"**Nível Atual:** {dados_u['nivel']}")
+                
+                with st.expander("✏️ Alterar Nível de Acesso"):
+                    novo_niv = st.selectbox("Novo Nível", [
+                        "1 - Motorista (Abrir/Consultar)",
+                        "2 - Administrador (Acesso Total)",
+                        "3 - Coordenador (Aprovação/Prioridade)"
+                    ], key="sel_novo_niv")
+                    if st.button("Salvar Novo Nível"):
+                        num_n = int(novo_niv.split(" - ")[0])
+                        sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n)
+                        if sucesso:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+                with st.expander("🗑️ Excluir Usuário"):
+                    st.warning(f"Tem certeza que deseja excluir o usuário '{user_selecionado}'?")
+                    if st.button("Confirmar Exclusão", type="primary"):
+                        sucesso, msg = excluir_usuario(user_selecionado)
+                        if sucesso:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+        st.markdown("---")
+        st.subheader("📋 Usuários Cadastrados")
         st.dataframe(df_u[['usuario', 'nome', 'nivel']], use_container_width=True)
