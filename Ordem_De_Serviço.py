@@ -10,13 +10,12 @@ st.set_page_config(page_title="Gestão de Manutenção - Copa Ambiental", page_i
 ARQUIVO_CSV = 'chamados_manutencao.csv'
 ARQUIVO_USUARIOS = 'usuarios.csv'
 
-# LISTA DE VEÍCULOS
+# LISTA DE VEÍCULOS (Sem a opção Outros na lista)
 VEICULOS = [
     "Caminhão Compactador", "Caminhão Poliguindaste", "Caminhão Roll-On",
     "Caminhão Pipa", "Caminhão Basculante", "Carregadeira",
     "Retroescavadeira", "Trator de Esteira", "Motoniveladora",
-    "Pick-up Operacional", "Van de Equipe", "Veículo Leve / Apoio",
-    "Outros (Digitar manualmente)"
+    "Pick-up Operacional", "Van de Equipe", "Veículo Leve / Apoio"
 ]
 
 # FUNÇÕES AUXILIARES PARA CRIPTOGRAFIA E USUÁRIOS
@@ -237,10 +236,21 @@ else:
     if aba_selecionada == "📝 Abrir Chamado":
         st.header("Abertura de Ordem de Serviço")
         with st.form("form_chamado", clear_on_submit=True):
-            veiculo_sel = st.selectbox("Selecione o Veículo/Equipamento", VEICULOS)
             
+            # Divide em duas colunas para posicionar o campo de seleção e o checkbox lado a lado
+            col_veic, col_chk = st.columns([3, 1])
+            
+            with col_veic:
+                veiculo_sel = st.selectbox("Selecione o Veículo/Equipamento", VEICULOS)
+            
+            with col_chk:
+                st.write("") # Espaçadores para alinhar verticalmente
+                st.write("")
+                outro_marcado = st.checkbox("Outros")
+
+            # Exibe o campo de digitação manual apenas se o checkbox estiver marcado
             outros_veiculo = ""
-            if veiculo_sel == "Outros (Digitar manualmente)":
+            if outro_marcado:
                 outros_veiculo = st.text_input("Especifique o Veículo/Equipamento")
                 
             placa = st.text_input("Placa / Identificação").upper()
@@ -248,9 +258,9 @@ else:
             btn_submeter = st.form_submit_button("Enviar Chamado")
 
             if btn_submeter:
-                veiculo_final = outros_veiculo if veiculo_sel == "Outros (Digitar manualmente)" else veiculo_sel
+                veiculo_final = outros_veiculo if outro_marcado else veiculo_sel
                 
-                if veiculo_sel == "Outros (Digitar manualmente)" and not outros_veiculo.strip():
+                if outro_marcado and not outros_veiculo.strip():
                     st.warning("Por favor, especifique o nome do veículo/equipamento no campo indicado.")
                 elif placa and descricao:
                     novo_id = f"OS-{len(df_os) + 1001}"
