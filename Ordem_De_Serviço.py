@@ -30,7 +30,7 @@ estilo_limpo = """
     header {visibility: hidden;}
     [data-testid="stHeader"] {display: none;}
     
-    /* Botões do Menu Principal com estilo mais bonito e limpo */
+    /* Botões do Menu Principal */
     div.stButton > button {
         width: 100%;
         height: 60px;
@@ -307,22 +307,24 @@ else:
 
     df_os = carregar_dados()
 
-    # TELA DO MENU PRINCIPAL (DESIGN MINIMALISTA)
+    # TELA DO MENU PRINCIPAL (PERMISSÕES AJUSTADAS)
     if st.session_state['aba_ativa'] == 'Menu':
         st.title("Menu Principal")
         st.caption(f"Bem-vindo, {user_data['nome']}")
         
-        # Mapeamento de opções conforme o nível de acesso
+        # Nível 1+: Todos podem abrir e consultar
         opcoes = [
             ("📝 Abrir Chamado", "Abrir Chamado"),
             ("🔍 Consultar Chamados", "Consultar Chamados")
         ]
         
+        # Nível 2+: Operacional / Mecânicos ganham o painel da oficina
         if nivel_user >= 2.0:
-            opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
             opcoes.append(("🛠️ Painel da Oficina", "Oficina"))
             
+        # Nível 3+: Coordenadores e SuperAdmins ganham a Triagem e Prioridades
         if nivel_user >= 3.0:
+            opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
             opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
 
         # Exibição dos botões em grade responsiva
@@ -335,7 +337,7 @@ else:
                     st.session_state['aba_ativa'] = chave
                     st.rerun()
 
-    # PÁGINAS INTERNAS (COM CABEÇALHO LIMPO)
+    # PÁGINAS INTERNAS
     else:
         col_voltar, col_titulo = st.columns([1, 4])
         with col_voltar:
@@ -445,27 +447,30 @@ else:
                             st.success("OS excluída!")
                             st.rerun()
 
-        # PÁGINA 3: TRIAGEM
+        # PÁGINA 3: TRIAGEM (Nível 3+)
         elif st.session_state['aba_ativa'] == "Triagem":
-            st.header("🎯 Triagem & Prioridades")
-            pendentes = df_os[(df_os['Aprovado_Coordenador'] == 'Não') & (df_os['Arquivado'] != 'Sim')]
-
-            if pendentes.empty:
-                st.info("Nenhum chamado pendente de aprovação.")
+            if nivel_user < 3.0:
+                st.error("Acesso não autorizado! Apenas Coordenadores (Nível 3+) possuem acesso à Triagem.")
             else:
-                for idx, row in pendentes.iterrows():
-                    with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
-                        st.write(f"**Solicitante:** {row['Motorista']} | **Data:** {row['Data']}")
-                        st.write(f"**Problema:** {row['Descricao_Problema']}")
-                        
-                        prioridade = st.selectbox(f"Prioridade", ["Alta", "Média", "Baixa"], key=f"prio_{idx}")
-                        if st.button(f"Aprovar e Enviar para Oficina", key=f"btn_aprov_{idx}", use_container_width=True):
-                            df_os.at[idx, 'Aprovado_Coordenador'] = 'Sim'
-                            df_os.at[idx, 'Prioridade'] = prioridade
-                            df_os.at[idx, 'Status'] = 'Aguardando Manutenção'
-                            salvar_dados(df_os)
-                            st.success(f"{row['ID_OS']} aprovada!")
-                            st.rerun()
+                st.header("🎯 Triagem & Prioridades")
+                pendentes = df_os[(df_os['Aprovado_Coordenador'] == 'Não') & (df_os['Arquivado'] != 'Sim')]
+
+                if pendentes.empty:
+                    st.info("Nenhum chamado pendente de aprovação.")
+                else:
+                    for idx, row in pendentes.iterrows():
+                        with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                            st.write(f"**Solicitante:** {row['Motorista']} | **Data:** {row['Data']}")
+                            st.write(f"**Problema:** {row['Descricao_Problema']}")
+                            
+                            prioridade = st.selectbox(f"Prioridade", ["Alta", "Média", "Baixa"], key=f"prio_{idx}")
+                            if st.button(f"Aprovar e Enviar para Oficina", key=f"btn_aprov_{idx}", use_container_width=True):
+                                df_os.at[idx, 'Aprovado_Coordenador'] = 'Sim'
+                                df_os.at[idx, 'Prioridade'] = prioridade
+                                df_os.at[idx, 'Status'] = 'Aguardando Manutenção'
+                                salvar_dados(df_os)
+                                st.success(f"{row['ID_OS']} aprovada!")
+                                st.rerun()
 
         # PÁGINA 4: OFICINA
         elif st.session_state['aba_ativa'] == "Oficina":
@@ -502,74 +507,77 @@ else:
 
         # PÁGINA 5: GESTÃO DE USUÁRIOS
         elif st.session_state['aba_ativa'] == "Usuarios":
-            st.header("👤 Gestão de Usuários")
-            
-            opcoes_nivel = [
-                "1 - Motorista",
-                "2 - Operacional",
-                "3 - Coordenador"
-            ]
-            if nivel_user == 4.0:
-                opcoes_nivel.extend(["3.5 - Coordenador Plus", "4 - SuperAdmin"])
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("➕ Novo Usuário")
-                with st.form("form_novo_user", clear_on_submit=True):
-                    nome_user = st.text_input("Nome Completo")
-                    username = st.text_input("Usuário (Login)").lower()
-                    senha_user = st.text_input("Senha", type="password")
-                    nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
-                    btn_cadastrar = st.form_submit_button("Cadastrar", use_container_width=True)
-
-                    if btn_cadastrar:
-                        if username and senha_user and nome_user:
-                            num_nivel = float(nivel_acesso.split(" - ")[0])
-                            sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
-                            if sucesso:
-                                st.success(msg)
-                                st.rerun()
-                            else:
-                                st.error(msg)
-                        else:
-                            st.warning("Preencha todos os campos.")
-
-            with col2:
-                st.subheader("⚙️ Gerenciar Usuário")
-                df_u = carregar_usuarios()
-                user_selecionado = st.selectbox("Selecione o Usuário", df_u['usuario'].tolist())
+            if nivel_user < 3.0:
+                st.error("Acesso não autorizado! Apenas Nível 3+ possui acesso à Gestão de Usuários.")
+            else:
+                st.header("👤 Gestão de Usuários")
                 
-                if user_selecionado:
-                    dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
-                    st.write(f"**Nome:** {dados_u['nome']} | **Nível:** {dados_u['nivel']}")
-                    
-                    with st.expander("Alterar Nível"):
-                        novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_nn")
-                        if st.button("Salvar Nível", use_container_width=True):
-                            num_n = float(novo_niv.split(" - ")[0])
-                            sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
-                            if sucesso:
-                                st.success(msg); st.rerun()
-                            else:
-                                st.error(msg)
+                opcoes_nivel = [
+                    "1 - Motorista",
+                    "2 - Operacional",
+                    "3 - Coordenador"
+                ]
+                if nivel_user == 4.0:
+                    opcoes_nivel.extend(["3.5 - Coordenador Plus", "4 - SuperAdmin"])
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.subheader("➕ Novo Usuário")
+                    with st.form("form_novo_user", clear_on_submit=True):
+                        nome_user = st.text_input("Nome Completo")
+                        username = st.text_input("Usuário (Login)").lower()
+                        senha_user = st.text_input("Senha", type="password")
+                        nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
+                        btn_cadastrar = st.form_submit_button("Cadastrar", use_container_width=True)
 
-                    with st.expander("Redefinir Senha"):
-                        nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
-                        if st.button("Atualizar Senha", use_container_width=True):
-                            if nova_senha:
-                                sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
+                        if btn_cadastrar:
+                            if username and senha_user and nome_user:
+                                num_nivel = float(nivel_acesso.split(" - ")[0])
+                                sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
+                                if sucesso:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                            else:
+                                st.warning("Preencha todos os campos.")
+
+                with col2:
+                    st.subheader("⚙️ Gerenciar Usuário")
+                    df_u = carregar_usuarios()
+                    user_selecionado = st.selectbox("Selecione o Usuário", df_u['usuario'].tolist())
+                    
+                    if user_selecionado:
+                        dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
+                        st.write(f"**Nome:** {dados_u['nome']} | **Nível:** {dados_u['nivel']}")
+                        
+                        with st.expander("Alterar Nível"):
+                            novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_nn")
+                            if st.button("Salvar Nível", use_container_width=True):
+                                num_n = float(novo_niv.split(" - ")[0])
+                                sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
                                 if sucesso:
                                     st.success(msg); st.rerun()
                                 else:
                                     st.error(msg)
 
-                    with st.expander("Excluir Conta"):
-                        if st.button("Confirmar Exclusão", type="primary", use_container_width=True):
-                            sucesso, msg = excluir_usuario(user_selecionado, usuario_atual, nivel_user)
-                            if sucesso:
-                                st.success(msg); st.rerun()
-                            else:
-                                st.error(msg)
+                        with st.expander("Redefinir Senha"):
+                            nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
+                            if st.button("Atualizar Senha", use_container_width=True):
+                                if nova_senha:
+                                    sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
+                                    if sucesso:
+                                        st.success(msg); st.rerun()
+                                    else:
+                                        st.error(msg)
 
-            st.markdown("---")
-            st.dataframe(df_u[['usuario', 'nome', 'nivel']], use_container_width=True)
+                        with st.expander("Excluir Conta"):
+                            if st.button("Confirmar Exclusão", type="primary", use_container_width=True):
+                                sucesso, msg = excluir_usuario(user_selecionado, usuario_atual, nivel_user)
+                                if sucesso:
+                                    st.success(msg); st.rerun()
+                                else:
+                                    st.error(msg)
+
+                st.markdown("---")
+                st.dataframe(df_u[['usuario', 'nome', 'nivel']], use_container_width=True)
