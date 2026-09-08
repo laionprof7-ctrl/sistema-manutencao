@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from PIL import Image
 import io
 
@@ -12,6 +12,12 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+
+# FUSO HORÁRIO DE BRASÍLIA (UTC-3)
+FUSO_BR = timezone(timedelta(hours=-3))
+
+def agora_brasil():
+    return datetime.now(FUSO_BR).strftime('%d/%m/%Y %H:%M')
 
 # CARREGAMENTO DA LOGO
 ARQUIVO_LOGO = "logo.png"
@@ -158,12 +164,12 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
 def limpar_chamados_expirados(df):
     if df.empty or 'Data' not in df.columns:
         return df
-    agora = datetime.now()
+    agora = datetime.now(FUSO_BR)
     indices_para_remover = []
     for idx, row in df.iterrows():
         if str(row.get('Aprovado_Coordenador', 'Não')).strip() == 'Não':
             try:
-                data_chamado = datetime.strptime(str(row['Data']), '%d/%m/%Y %H:%M')
+                data_chamado = datetime.strptime(str(row['Data']), '%d/%m/%Y %H:%M').replace(tzinfo=FUSO_BR)
                 if agora - data_chamado > timedelta(days=7):
                     indices_para_remover.append(idx)
             except Exception:
@@ -238,7 +244,7 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     
     p_data_geracao = doc.add_paragraph()
     p_data_geracao.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_data_geracao.add_run(f"Emitido em: {datetime.now().strftime('%d/%m/%Y às %H:%M')}")
+    p_data_geracao.add_run(f"Emitido em: {agora_brasil()}")
     
     doc.add_paragraph()
 
@@ -424,7 +430,7 @@ else:
                         novo_id = f"OS-{len(df_os) + 1001}"
                         nova_os = {
                             'ID_OS': novo_id,
-                            'Data': pd.Timestamp.now().strftime('%d/%m/%Y %H:%M'),
+                            'Data': agora_brasil(),
                             'Motorista': user_data['nome'],
                             'Veiculo': veiculo_final,
                             'Placa': placa,
@@ -507,7 +513,7 @@ else:
                             st.download_button(
                                 label=f"Baixar ({veiculo_escolhido})",
                                 data=arquivo_docx,
-                                file_name=f"relatorio_manutencao_{veiculo_escolhido.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+                                file_name=f"relatorio_manutencao_{veiculo_escolhido.replace(' ', '_').lower()}_{datetime.now(FUSO_BR).strftime('%Y%m%d_%H%M')}.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True
                             )
@@ -560,7 +566,7 @@ else:
                                 df_os.at[idx, 'Aprovado_Coordenador'] = 'Sim'
                                 df_os.at[idx, 'Prioridade'] = prioridade
                                 df_os.at[idx, 'Status'] = 'Aguardando Manutenção'
-                                df_os.at[idx, 'Data_Aprovacao'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+                                df_os.at[idx, 'Data_Aprovacao'] = agora_brasil()
                                 salvar_dados(df_os)
                                 st.success(f"{row['ID_OS']} aprovada!")
                                 st.rerun()
@@ -612,7 +618,7 @@ else:
                                     else:
                                         df_os.at[idx, 'Status'] = novo_status
                                         if novo_status == 'Concluído' and not str(row['Data_Liberacao']).strip():
-                                            df_os.at[idx, 'Data_Liberacao'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+                                            df_os.at[idx, 'Data_Liberacao'] = agora_brasil()
                                         elif novo_status != 'Concluído':
                                             df_os.at[idx, 'Data_Liberacao'] = ''
                                         salvar_dados(df_os)
@@ -630,7 +636,7 @@ else:
                                             
                                             st_fin = st.session_state[f"temp_status_{idx}"]
                                             if st_fin == 'Concluído' and not str(row['Data_Liberacao']).strip():
-                                                df_os.at[idx, 'Data_Liberacao'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+                                                df_os.at[idx, 'Data_Liberacao'] = agora_brasil()
                                             
                                             salvar_dados(df_os)
                                             st.session_state[chave_confirma] = False
