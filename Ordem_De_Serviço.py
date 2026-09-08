@@ -74,6 +74,12 @@ def carregar_usuarios():
 
 def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
     df = carregar_usuarios()
+    
+    # Restrição absoluta: Apenas SuperAdmin (4.0) pode ser criado manualmente se necessário, 
+    # mas bloqueamos a criação de novos níveis 4.0 caso já exista algum ou para garantir unicidade do Laion.
+    if float(nivel) >= 4.0:
+        return False, "Não é permitido cadastrar novos usuários de nível 4.0!"
+
     if novo_user in df['usuario'].values:
         return False, "Usuário já existe!"
     
@@ -94,6 +100,10 @@ def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
         nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
+        # Ninguém pode alterar o nível para 4.0 ou alterar o nível de um usuário 4.0
+        if float(novo_nivel) >= 4.0 or nivel_alvo >= 4.0:
+            return False, "Não é permitido atribuir ou alterar níveis de Administrador Global (4.0)!"
         
         if float(nivel_editor) <= nivel_alvo:
             return False, "Você não tem permissão para alterar o nível deste usuário!"
@@ -123,11 +133,12 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
         nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
-        nivel_editor = float(nivel_editor)
         
-        # SuperAdmin (4.0) pode excluir usuários do mesmo nível.
-        # Outros níveis seguem a regra restrita de não excluir nível igual ou superior.
-        if nivel_editor < 4.0 and nivel_editor <= nivel_alvo:
+        # Bloqueio total para impedir a exclusão de qualquer usuário de nível 4.0 (SuperAdmin)
+        if nivel_alvo >= 4.0:
+            return False, "Não é permitido excluir usuários com nível de Administrador Global (4.0)!"
+        
+        if float(nivel_editor) <= nivel_alvo:
             return False, "Você não tem permissão para excluir um usuário de nível igual ou superior!"
             
         df = df[df['usuario'] != user_alvo]
@@ -480,13 +491,15 @@ else:
             else:
                 st.header("👤 Gestão de Usuários")
                 
+                # Apenas níveis 1 a 3 disponíveis para novos cadastros (nível 4.0/Administrador Global bloqueado)
                 opcoes_nivel = [
                     "1 - Motorista",
                     "2 - Operacional",
                     "3 - Coordenador"
                 ]
                 if nivel_user >= 4.0:
-                    opcoes_nivel.extend(["3.5 - Coordenador Plus", "4 - Administrador"])
+                    opcoes_nivel.append("3.5 - Coordenador Plus")
+                    # Nível 4 foi removido das opções de cadastro para garantir unicidade do Administrador
                 
                 col1, col2 = st.columns(2)
                 with col1:
