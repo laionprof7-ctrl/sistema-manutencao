@@ -470,24 +470,33 @@ else:
                     if busca_placa:
                         df_rel_base = df_rel_base[df_rel_base['Placa'].astype(str).str.contains(busca_placa, na=False)]
 
-                    veiculos_disponiveis = df_rel_base['Veiculo'].dropna().unique().tolist()
-                    
-                    if not veiculos_disponiveis:
-                        st.info("Nenhum veículo disponível para exportação com os filtros atuais.")
+                    if df_rel_base.empty:
+                        st.info("Nenhum chamado disponível para exportação com os filtros atuais.")
                     else:
+                        # Cria uma lista combinando Veículo e Número do Chamado (ID_OS)
+                        opcoes_relatorio = []
+                        mapa_relatorio = {}
+                        for _, row_r in df_rel_base.iterrows():
+                            rotulo_item = f"{row_r['Veiculo']} — {row_r['ID_OS']} (Placa: {row_r['Placa']})"
+                            opcoes_relatorio.append(rotulo_item)
+                            mapa_relatorio[rotulo_item] = row_r['ID_OS']
+
                         col_sel_v, col_btn_v = st.columns([2, 1])
                         with col_sel_v:
-                            veiculo_escolhido = st.selectbox("Selecione o Veículo/Equipamento", veiculos_disponiveis)
+                            escolha_selecionada = st.selectbox("Selecione o Veículo e Chamado (OS)", opcoes_relatorio)
                         
                         with col_btn_v:
                             st.write("")
-                            df_veiculo_especifico = df_rel_base[df_rel_base['Veiculo'] == veiculo_escolhido]
-                            arquivo_docx = gerar_relatorio_word(df_veiculo_especifico, subtitulo_filtro=f"Veículo / Equipamento: {veiculo_escolhido}")
+                            id_os_escolhido = mapa_relatorio[escolha_selecionada]
+                            df_chamado_especifico = df_rel_base[df_rel_base['ID_OS'] == id_os_escolhido]
+                            
+                            veiculo_nome_arq = df_chamado_especifico.iloc[0]['Veiculo']
+                            arquivo_docx = gerar_relatorio_word(df_chamado_especifico, subtitulo_filtro=f"Equipamento: {veiculo_nome_arq} | OS: {id_os_escolhido}")
 
                             st.download_button(
-                                label=f"Baixar ({veiculo_escolhido})",
+                                label=f"Baixar ({id_os_escolhido})",
                                 data=arquivo_docx,
-                                file_name=f"relatorio_manutencao_{veiculo_escolhido.replace(' ', '_').lower()}_{datetime.now(FUSO_BR).strftime('%Y%m%d_%H%M')}.docx",
+                                file_name=f"relatorio_{id_os_escolhido}_{datetime.now(FUSO_BR).strftime('%Y%m%d_%H%M')}.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True
                             )
