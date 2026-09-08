@@ -207,7 +207,7 @@ def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False)
 
 # FUNÇÃO PARA GERAR O DOCUMENTO WORD (.DOCX)
-def gerar_relatorio_word(df_rel):
+def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     doc = Document()
     
     # Cabeçalho da Empresa
@@ -231,6 +231,13 @@ def gerar_relatorio_word(df_rel):
     run_tit = p_titulo.add_run("RELATÓRIO DE MANUTENÇÃO DO VEÍCULO")
     run_tit.bold = True
     run_tit.font.size = Pt(16)
+    
+    if subtitulo_filtro:
+        p_sub = doc.add_paragraph()
+        p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_sub = p_sub.add_run(subtitulo_filtro)
+        run_sub.font.size = Pt(11)
+        run_sub.font.italic = True
     
     p_data_geracao = doc.add_paragraph()
     p_data_geracao.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -430,7 +437,7 @@ else:
             
             c1, c2 = st.columns([3, 1])
             with c1:
-                busca_placa = st.text_input("Buscar por Placa").upper()
+                busca_placa = st.text_input("Buscar por Placa ou Identificação").upper()
             with c2:
                 ver_arquivados = st.selectbox("Exibir", ["Ativos", "Arquivados"])
             
@@ -456,27 +463,43 @@ else:
 
             st.dataframe(df_exibicao, use_container_width=True)
 
-            # Botão de Gerar Relatório em Word (.docx) para Níveis 3.0+
+            # Seção de Relatório Individual por Veículo/Equipamento para Níveis 3.0+
             if nivel_user >= 3.0:
                 st.markdown("---")
-                df_rel = df_os.copy()
+                st.subheader("📥 Baixar Relatório Individual por Veículo/Equipamento")
+                
+                df_rel_base = df_os.copy()
                 if status_arq == "Sim":
-                    df_rel = df_rel[df_rel['Arquivado'] == 'Sim']
+                    df_rel_base = df_rel_base[df_rel_base['Arquivado'] == 'Sim']
                 else:
-                    df_rel = df_rel[df_rel['Arquivado'] != 'Sim']
+                    df_rel_base = df_rel_base[df_rel_base['Arquivado'] != 'Sim']
 
                 if busca_placa:
-                    df_rel = df_rel[df_rel['Placa'].astype(str).str.contains(busca_placa, na=False)]
+                    df_rel_base = df_rel_base[df_rel_base['Placa'].astype(str).str.contains(busca_placa, na=False)]
 
-                arquivo_docx = gerar_relatorio_word(df_rel)
+                # Obtém a lista de veículos disponíveis nos registros filtrados
+                veiculos_disponiveis = df_rel_base['Veiculo'].dropna().unique().tolist()
+                
+                if not veiculos_disponiveis:
+                    st.info("Nenhum veículo disponível para exportação com os filtros atuais.")
+                else:
+                    col_sel_v, col_btn_v = st.columns([2, 1])
+                    with col_sel_v:
+                        veiculo_escolhido = st.selectbox("Selecione o Veículo/Equipamento", veiculos_disponiveis)
+                    
+                    with col_btn_v:
+                        st.write("")
+                        st.write("")
+                        df_veiculo_especifico = df_rel_base[df_rel_base['Veiculo'] == veiculo_escolhido]
+                        arquivo_docx = gerar_relatorio_word(df_veiculo_especifico, subtitulo_filtro=f"Veículo / Equipamento: {veiculo_escolhido}")
 
-                st.download_button(
-                    label="📥 Baixar Relatório de Manutenção (Word / .docx)",
-                    data=arquivo_docx,
-                    file_name=f"relatorio_manutencao_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
+                        st.download_button(
+                            label=f"Baixar Relatório ({veiculo_escolhido})",
+                            data=arquivo_docx,
+                            file_name=f"relatorio_manutencao_{veiculo_escolhido.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
 
             if nivel_user >= 4.0:
                 st.markdown("---")
@@ -561,7 +584,6 @@ else:
                                 else:
                                     mecanico = st.text_input("Mecânico Responsável", value="", key=f"mec_{idx}")
                                 
-                                # Chave para controle da tela de confirmação do mecânico
                                 chave_confirma = f"confirma_mec_{idx}"
                                 if chave_confirma not in st.session_state:
                                     st.session_state[chave_confirma] = False
@@ -571,13 +593,11 @@ else:
                                         if not mecanico or mecanico.strip() == '' or mecanico == 'Não Atribuído':
                                             st.warning("Informe o nome do mecânico responsável.")
                                         else:
-                                            # Ativa a tela de confirmação exigida
                                             st.session_state[chave_confirma] = True
                                             st.session_state[f"temp_mec_{idx}"] = mecanico.strip()
                                             st.session_state[f"temp_status_{idx}"] = novo_status
                                             st.rerun()
                                     else:
-                                        # Caso já esteja bloqueado, salva direto o status/data liberação
                                         df_os.at[idx, 'Status'] = novo_status
                                         if novo_status == 'Concluído' and not str(row['Data_Liberacao']).strip():
                                             df_os.at[idx, 'Data_Liberacao'] = datetime.now().strftime('%d/%m/%Y %H:%M')
@@ -587,7 +607,6 @@ else:
                                         st.success("Atualizado com sucesso!")
                                         st.rerun()
 
-                                # Tela de Confirmação solicitada: "Atribuir [nome] a função?"
                                 if st.session_state.get(chave_confirma, False):
                                     nome_temp = st.session_state[f"temp_mec_{idx}"]
                                     st.warning(f"⚠️ **Atribuir {nome_temp} a função?** (Esta ação bloqueará a alteração futura do mecânico).")
