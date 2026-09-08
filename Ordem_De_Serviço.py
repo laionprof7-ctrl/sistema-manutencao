@@ -312,7 +312,6 @@ else:
             opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
             opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
 
-        # Adiciona a opção de Sair também no Menu Principal
         opcoes.append(("🚪 Sair / Logout", "Logout"))
 
         col_m1, col_m2 = st.columns(2)
@@ -548,39 +547,61 @@ else:
                     if df_u.empty:
                         st.info("Nenhum usuário cadastrado.")
                     else:
-                        user_selecionado = st.selectbox("Selecione o Usuário", df_u['usuario'].tolist())
+                        # Campo opcional para filtrar pelo nome ou login antes de selecionar
+                        filtro_busca = st.text_input("🔍 Filtrar por nome ou login (opcional)").strip().lower()
                         
-                        if user_selecionado:
-                            dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
-                            st.write(f"**Nome:** {dados_u['nome']} | **Nível:** {dados_u['nivel']}")
-                            
-                            with st.expander("Alterar Nível"):
-                                novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_nn")
-                                if st.button("Salvar Nível", use_container_width=True):
-                                    num_n = float(novo_niv.split(" - ")[0])
-                                    sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
-                                    if sucesso:
-                                        st.success(msg); st.rerun()
-                                    else:
-                                        st.error(msg)
+                        df_filtrado = df_u.copy()
+                        if filtro_busca:
+                            df_filtrado = df_filtrado[
+                                df_filtrado['nome'].astype(str).str.lower().str.contains(filtro_busca, na=False) |
+                                df_filtrado['usuario'].astype(str).str.lower().str.contains(filtro_busca, na=False)
+                            ]
 
-                            with st.expander("Redefinir Senha"):
-                                nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
-                                if st.button("Atualizar Senha", use_container_width=True):
-                                    if nova_senha:
-                                        sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
+                        if df_filtrado.empty:
+                            st.warning("Nenhum usuário encontrado com esse filtro.")
+                        else:
+                            # Monta uma lista amigável exibindo: "Nome Completo (usuario)"
+                            opcoes_select = []
+                            mapa_usuarios = {}
+                            for _, r in df_filtrado.iterrows():
+                                rotulo = f"{r['nome']} ({r['usuario']})"
+                                opcoes_select.append(rotulo)
+                                mapa_usuarios[rotulo] = r['usuario']
+
+                            user_selecionado_rotulo = st.selectbox("Selecione o Usuário", opcoes_select)
+                            user_selecionado = mapa_usuarios[user_selecionado_rotulo]
+                            
+                            if user_selecionado:
+                                dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
+                                st.write(f"**Nome:** {dados_u['nome']} | **Usuário:** `{dados_u['usuario']}` | **Nível:** {dados_u['nivel']}")
+                                
+                                with st.expander("Alterar Nível"):
+                                    novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_nn")
+                                    if st.button("Salvar Nível", use_container_width=True):
+                                        num_n = float(novo_niv.split(" - ")[0])
+                                        sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
                                         if sucesso:
                                             st.success(msg); st.rerun()
                                         else:
                                             st.error(msg)
 
-                            with st.expander("Excluir Conta"):
-                                if st.button("Confirmar Exclusão", type="primary", use_container_width=True):
-                                    sucesso, msg = excluir_usuario(user_selecionado, usuario_atual, nivel_user)
-                                    if sucesso:
-                                        st.success(msg); st.rerun()
-                                    else:
-                                        st.error(msg)
+                                with st.expander("Redefinir Senha"):
+                                    nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
+                                    if st.button("Atualizar Senha", use_container_width=True):
+                                        if nova_senha:
+                                            sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
+                                            if sucesso:
+                                                st.success(msg); st.rerun()
+                                            else:
+                                                st.error(msg)
+
+                                with st.expander("Excluir Conta"):
+                                    if st.button("Confirmar Exclusão", type="primary", use_container_width=True):
+                                        sucesso, msg = excluir_usuario(user_selecionado, usuario_atual, nivel_user)
+                                        if sucesso:
+                                            st.success(msg); st.rerun()
+                                        else:
+                                            st.error(msg)
 
                 st.markdown("---")
                 if not df_u.empty:
