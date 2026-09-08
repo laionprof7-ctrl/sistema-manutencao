@@ -262,16 +262,32 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
                 
     for _, row in df_rel.iterrows():
         row_cells = tabela.add_row().cells
+        
+        def formatar_data_hora(val):
+            if not val or str(val).lower() == 'nan' or str(val).strip() == '':
+                return ''
+            val_str = str(val).strip()
+            try:
+                dt = datetime.strptime(val_str, '%d/%m/%Y %H:%M')
+                return dt.strftime('%d/%m/%Y %H:%M')
+            except ValueError:
+                try:
+                    dt = datetime.fromisoformat(val_str)
+                    return dt.strftime('%d/%m/%Y %H:%M')
+                except Exception:
+                    return val_str
+
         valores = [
             str(row.get('ID_OS', '')),
             str(row.get('Veiculo', '')),
             str(row.get('Placa', '')),
-            str(row.get('Data', '')),
-            str(row.get('Data_Aprovacao', '')),
+            formatar_data_hora(row.get('Data', '')),
+            formatar_data_hora(row.get('Data_Aprovacao', '')),
             str(row.get('Prioridade', '')),
             str(row.get('Mecanico_Responsavel', '')),
-            str(row.get('Data_Liberacao', ''))
+            formatar_data_hora(row.get('Data_Liberacao', ''))
         ]
+        
         for i, val in enumerate(valores):
             row_cells[i].text = val if val != 'nan' else ''
             for paragraph in row_cells[i].paragraphs:
