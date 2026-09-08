@@ -4,9 +4,10 @@ import os
 import hashlib
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Gestão de Manutenção - Copa Ambiental", page_icon="🚛", layout="wide")
+# Configuração com a logo como ícone da aba do navegador
+st.set_page_config(page_title="Gestão de Manutenção - Copa Ambiental", page_icon="logo.png", layout="wide")
 
-# OCULTA A BARRA SUPERIOR, O ÍCONE DO GITHUB E O MENU DO STREAMLIT
+# OCULTA TOTALMENTE A BARRA SUPERIOR, O ÍCONE DO GITHUB E O MENU DO STREAMLIT
 esconder_menu = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -202,7 +203,7 @@ def carregar_dados():
         if col not in df.columns:
             df[col] = ''
             
-    # Tratamento de valores nulos
+    # Tratamento de valores nulos (evita "nan" na interface)
     df = df.fillna({
         'Motorista': 'Não Identificado',
         'Descricao_Problema': 'Sem descrição',
@@ -226,7 +227,11 @@ if 'logged_in' not in st.session_state:
     st.session_state['user_info'] = None
 
 if not st.session_state['logged_in']:
-    st.title("🚛 Copa Ambiental | Login do Sistema")
+    # EXIBE A LOGO NA TELA DE LOGIN
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=300)
+    
+    st.title("Gestão de Manutenção | Login do Sistema")
     
     with st.form("form_login"):
         user_input = st.text_input("Usuário").strip().lower()
@@ -246,7 +251,10 @@ if not st.session_state['logged_in']:
             else:
                 st.error("Usuário ou senha incorretos.")
 else:
-    # BARRA LATERAL
+    # BARRA LATERAL COM A LOGO
+    if os.path.exists("logo.png"):
+        st.sidebar.image("logo.png", use_container_width=True)
+    
     user_data = st.session_state['user_info']
     nivel_user = float(user_data['nivel'])
     usuario_atual = str(user_data['usuario'])
@@ -473,12 +481,12 @@ else:
                 nome_user = st.text_input("Nome Completo do Colaborador")
                 username = st.text_input("Nome de Usuário (Login)").lower()
                 senha_user = st.text_input("Senha Inicial", type="password")
-                nivel_accesso = st.selectbox("Nível de Acesso", opcoes_nivel)
+                nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
                 btn_cadastrar = st.form_submit_button("Criar Usuário")
 
                 if btn_cadastrar:
                     if username and senha_user and nome_user:
-                        num_nivel = float(nivel_accesso.split(" - ")[0])
+                        num_nivel = float(nivel_acesso.split(" - ")[0])
                         sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
                         if sucesso:
                             st.success(msg)
