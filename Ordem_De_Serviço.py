@@ -40,8 +40,8 @@ estilo_limpo = """
     
     div.stButton > button {
         width: 100%;
-        height: 60px;
-        font-size: 17px !important;
+        height: 48px;
+        font-size: 16px !important;
         font-weight: 600 !important;
         border-radius: 8px !important;
         border: 1px solid #e0e0e0 !important;
@@ -206,11 +206,9 @@ def carregar_dados():
 def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False)
 
-# FUNÇÃO PARA GERAR O DOCUMENTO WORD (.DOCX)
 def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     doc = Document()
     
-    # Cabeçalho da Empresa
     p_empresa = doc.add_paragraph()
     p_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_emp = p_empresa.add_run("COPA ENGENHARIA AMBIENTAL E LOCAÇÃO DE EQUIPAMENTOS LTDA")
@@ -225,7 +223,6 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     
     doc.add_paragraph().alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Título do Documento
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_tit = p_titulo.add_run("RELATÓRIO DE MANUTENÇÃO DO VEÍCULO")
@@ -245,7 +242,6 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     
     doc.add_paragraph()
 
-    # Criando a Tabela no Word
     tabela = doc.add_table(rows=1, cols=8)
     tabela.alignment = WD_TABLE_ALIGNMENT.CENTER
     tabela.style = 'Table Grid'
@@ -465,67 +461,67 @@ else:
 
             # Seção de Relatório Individual por Veículo/Equipamento para Níveis 3.0+
             if nivel_user >= 3.0:
-                st.markdown("---")
-                st.subheader("📥 Baixar Relatório Individual por Veículo/Equipamento")
-                
-                df_rel_base = df_os.copy()
-                if status_arq == "Sim":
-                    df_rel_base = df_rel_base[df_rel_base['Arquivado'] == 'Sim']
-                else:
-                    df_rel_base = df_rel_base[df_rel_base['Arquivado'] != 'Sim']
-
-                if busca_placa:
-                    df_rel_base = df_rel_base[df_rel_base['Placa'].astype(str).str.contains(busca_placa, na=False)]
-
-                # Obtém a lista de veículos disponíveis nos registros filtrados
-                veiculos_disponiveis = df_rel_base['Veiculo'].dropna().unique().tolist()
-                
-                if not veiculos_disponiveis:
-                    st.info("Nenhum veículo disponível para exportação com os filtros atuais.")
-                else:
-                    col_sel_v, col_btn_v = st.columns([2, 1])
-                    with col_sel_v:
-                        veiculo_escolhido = st.selectbox("Selecione o Veículo/Equipamento", veiculos_disponiveis)
+                st.markdown("")
+                with st.container(border=True):
+                    st.subheader("📥 Baixar Relatório Individual")
                     
-                    with col_btn_v:
-                        st.write("")
-                        st.write("")
-                        df_veiculo_especifico = df_rel_base[df_rel_base['Veiculo'] == veiculo_escolhido]
-                        arquivo_docx = gerar_relatorio_word(df_veiculo_especifico, subtitulo_filtro=f"Veículo / Equipamento: {veiculo_escolhido}")
+                    df_rel_base = df_os.copy()
+                    if status_arq == "Sim":
+                        df_rel_base = df_rel_base[df_rel_base['Arquivado'] == 'Sim']
+                    else:
+                        df_rel_base = df_rel_base[df_rel_base['Arquivado'] != 'Sim']
 
-                        st.download_button(
-                            label=f"Baixar Relatório ({veiculo_escolhido})",
-                            data=arquivo_docx,
-                            file_name=f"relatorio_manutencao_{veiculo_escolhido.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True
-                        )
+                    if busca_placa:
+                        df_rel_base = df_rel_base[df_rel_base['Placa'].astype(str).str.contains(busca_placa, na=False)]
+
+                    veiculos_disponiveis = df_rel_base['Veiculo'].dropna().unique().tolist()
+                    
+                    if not veiculos_disponiveis:
+                        st.info("Nenhum veículo disponível para exportação com os filtros atuais.")
+                    else:
+                        col_sel_v, col_btn_v = st.columns([2, 1])
+                        with col_sel_v:
+                            veiculo_escolhido = st.selectbox("Selecione o Veículo/Equipamento", veiculos_disponiveis)
+                        
+                        with col_btn_v:
+                            st.write("")
+                            df_veiculo_especifico = df_rel_base[df_rel_base['Veiculo'] == veiculo_escolhido]
+                            arquivo_docx = gerar_relatorio_word(df_veiculo_especifico, subtitulo_filtro=f"Veículo / Equipamento: {veiculo_escolhido}")
+
+                            st.download_button(
+                                label=f"Baixar ({veiculo_escolhido})",
+                                data=arquivo_docx,
+                                file_name=f"relatorio_manutencao_{veiculo_escolhido.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True
+                            )
 
             if nivel_user >= 4.0:
-                st.markdown("---")
-                st.subheader("⚙️ Gestão de OS (Administrador Global)")
-                lista_os = df_os['ID_OS'].tolist()
-                if lista_os:
-                    os_selecionada = st.selectbox("Selecione a OS", lista_os)
-                    dados_os_sel = df_os[df_os['ID_OS'] == os_selecionada].iloc[0]
-                    idx_os = df_os[df_os['ID_OS'] == os_selecionada].index[0]
+                st.markdown("")
+                with st.container(border=True):
+                    st.subheader("⚙️ Gestão de OS (Administrador Global)")
+                    lista_os = df_os['ID_OS'].tolist()
+                    if lista_os:
+                        os_selecionada = st.selectbox("Selecione a OS para Ação", lista_os)
+                        dados_os_sel = df_os[df_os['ID_OS'] == os_selecionada].iloc[0]
+                        idx_os = df_os[df_os['ID_OS'] == os_selecionada].index[0]
 
-                    col_arq, col_del = st.columns(2)
-                    with col_arq:
-                        status_atual_arq = dados_os_sel.get('Arquivado', 'Não')
-                        lbl_btn = "Desarquivar" if status_atual_arq == "Sim" else "Arquivar"
-                        if st.button(lbl_btn, use_container_width=True):
-                            df_os.at[idx_os, 'Arquivado'] = "Não" if status_atual_arq == "Sim" else "Sim"
-                            salvar_dados(df_os)
-                            st.success("Status atualizado!")
-                            st.rerun()
+                        col_arq, col_del = st.columns(2)
+                        with col_arq:
+                            status_atual_arq = dados_os_sel.get('Arquivado', 'Não')
+                            lbl_btn = "Desarquivar" if status_atual_arq == "Sim" else "Arquivar"
+                            if st.button(lbl_btn, use_container_width=True):
+                                df_os.at[idx_os, 'Arquivado'] = "Não" if status_atual_arq == "Sim" else "Sim"
+                                salvar_dados(df_os)
+                                st.success("Status atualizado!")
+                                st.rerun()
 
-                    with col_del:
-                        if st.button("🗑️ Excluir Definitivamente", type="primary", use_container_width=True):
-                            df_os = df_os.drop(index=idx_os).reset_index(drop=True)
-                            salvar_dados(df_os)
-                            st.success("OS excluída!")
-                            st.rerun()
+                        with col_del:
+                            if st.button("🗑️ Excluir Definitivamente", type="primary", use_container_width=True):
+                                df_os = df_os.drop(index=idx_os).reset_index(drop=True)
+                                salvar_dados(df_os)
+                                st.success("OS excluída!")
+                                st.rerun()
 
         # PÁGINA 3: TRIAGEM
         elif st.session_state['aba_ativa'] == "Triagem":
