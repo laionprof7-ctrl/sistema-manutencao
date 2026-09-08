@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Gestão de Manutenção - Copa Ambiental", page_icon="🚛", layout="wide")
 
-# OCULTA TOTALMENTE A BARRA SUPERIOR, O ÍCONE DO GITHUB E O MENU DO STREAMLIT
+# OCULTA A BARRA SUPERIOR, O ÍCONE DO GITHUB E O MENU DO STREAMLIT
 esconder_menu = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -202,7 +202,7 @@ def carregar_dados():
         if col not in df.columns:
             df[col] = ''
             
-    # Tratamento de valores nulos (evita "nan" na interface)
+    # Tratamento de valores nulos
     df = df.fillna({
         'Motorista': 'Não Identificado',
         'Descricao_Problema': 'Sem descrição',
@@ -473,12 +473,12 @@ else:
                 nome_user = st.text_input("Nome Completo do Colaborador")
                 username = st.text_input("Nome de Usuário (Login)").lower()
                 senha_user = st.text_input("Senha Inicial", type="password")
-                nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
+                nivel_accesso = st.selectbox("Nível de Acesso", opcoes_nivel)
                 btn_cadastrar = st.form_submit_button("Criar Usuário")
 
                 if btn_cadastrar:
                     if username and senha_user and nome_user:
-                        num_nivel = float(nivel_acesso.split(" - ")[0])
+                        num_nivel = float(nivel_accesso.split(" - ")[0])
                         sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
                         if sucesso:
                             st.success(msg)
