@@ -579,7 +579,7 @@ else:
                 st.header("🛠️ Painel da Oficina")
                 aprovados = df_os[(df_os['Aprovado_Coordenador'] == 'Sim') & (df_os['Arquivado'] != 'Sim')]
                 
-                aba_pend, aba_and, aba_conc = st.tabs(["⏳ Em Aberto", "🔄 Em Andamento", "✅ Concluídos"])
+                aba_pend, aba_and, aba_conc, aba_busca = st.tabs(["⏳ Em Aberto", "🔄 Em Andamento", "✅ Concluídos Recentes", "🔍 Filtrar Histórico"])
                 
                 def renderizar_cards(df_sub, aba_nome):
                     if df_sub.empty:
@@ -652,7 +652,53 @@ else:
                 with aba_and:
                     renderizar_cards(aprovados[aprovados['Status'] == 'Em Andamento'], "Em Andamento")
                 with aba_conc:
-                    renderizar_cards(aprovados[aprovados['Status'] == 'Concluído'], "Concluídos")
+                    # Filtra apenas concluídos recentes (últimos 2 dias) para não acumular na tela principal
+                    def eh_recente(data_str):
+                        try:
+                            dt = datetime.strptime(str(data_str).strip(), '%d/%m/%Y %H:%M')
+                            agora = datetime.now(FUSO_BR).replace(tzinfo=None)
+                            return (agora - dt).days <= 2
+                        except Exception:
+                            return False
+                    
+                    concluidos_todos = aprovados[aprovados['Status'] == 'Concluído']
+                    concluidos_recentes = concluidos_todos[concluidos_todos['Data_Liberacao'].apply(eh_recente)]
+                    renderizar_cards(concluidos_recentes, "Concluídos Recentes")
+
+                with aba_busca:
+                    st.subheader("🔍 Filtro Avançado de Chamados")
+                    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+                    with col_f1:
+                        f_status = st.selectbox("Status", ["Todos", "Aguardando Aprovação", "Aguardando Manutenção", "Em Andamento", "Concluído"], key="f_status")
+                    with col_f2:
+                        f_mecanico = st.text_input("Mecânico Responsável", key="f_mec")
+                    with col_f3:
+                        f_data = st.text_input("Data (DD/MM/AAAA)", key="f_data")
+                    with col_f4:
+                        f_placa = st.text_input("Placa / ID", key="f_placa")
+
+                    df_filtrado = df_os[df_os['Arquivado'] != 'Sim'].copy()
+                    if f_status != "Todos":
+                        df_filtrado = df_filtrado[df_filtrado['Status'] == f_status]
+                    if f_mecanico.strip():
+                        df_filtrado = df_filtrado[df_filtrado['Mecanico_Responsavel'].astype(str).str.contains(f_mecanico, case=False, na=False)]
+                    if f_data.strip():
+                        df_filtrado = df_filtrado[
+                            df_filtrado['Data'].astype(str).str.contains(f_data, case=False, na=False) | 
+                            df_filtrado['Data_Aprovacao'].astype(str).str.contains(f_data, case=False, na=False) | 
+                            df_filtrado['Data_Liberacao'].astype(str).str.contains(f_data, case=False, na=False)
+                        ]
+                    if f_placa.strip():
+                        df_filtrado = df_filtrado[
+                            df_filtrado['Placa'].astype(str).str.contains(f_placa, case=False, na=False) | 
+                            df_filtrado['ID_OS'].astype(str).str.contains(f_placa, case=False, na=False)
+                        ]
+
+                    st.markdown("")
+                    st.dataframe(
+                        df_filtrado[['ID_OS', 'Data', 'Veiculo', 'Placa', 'Status', 'Prioridade', 'Mecanico_Responsavel', 'Data_Liberacao']], 
+                        use_container_width=True
+                    )
 
         # PÁGINA 5: GESTÃO DE USUÁRIOS
         elif st.session_state['aba_ativa'] == "Usuarios":
