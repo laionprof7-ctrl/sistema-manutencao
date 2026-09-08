@@ -9,10 +9,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# Configuração da Página
+# Configuração da Página (Correção do parâmetro layout)
 st.set_page_config(
     page_title="Sistema Integrado de Gestão de Manutenção de Frota",
-    page_layout="wide"
+    layout="wide"
 )
 
 # Caminhos dos Arquivos CSV (Persistência Flat-File)
@@ -50,7 +50,6 @@ def limpar_chamados_expirados():
         if not df.empty and "Data Abertura" in df.columns:
             hoje = datetime.now()
             df['Data_Obj'] = pd.to_datetime(df['Data Abertura'], errors='coerce')
-            # Mantém se o status for diferente de aguardando aprovação OU se a data for recente (< 7 dias)
             condicao = (df['Status'] != 'Aguardando Aprovação') | ((hoje - df['Data_Obj']).dt.days <= 7)
             df_filtrado = df[condicao].drop(columns=['Data_Obj'])
             df_filtrado.to_csv(ARQ_CHAMADOS, index=False)
