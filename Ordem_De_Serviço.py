@@ -75,16 +75,26 @@ def carregar_usuarios():
 def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
     df = carregar_usuarios()
     
+    # Validação de Nome e Sobrenome (exige pelo menos um espaço)
+    nome_limpo = nome.strip()
+    if " " not in nome_limpo:
+        return False, "Por favor, digite o Nome e o Sobrenome completo!"
+
     if float(nivel) >= 4.0:
         return False, "Não é permitido cadastrar novos usuários de nível 4.0!"
 
     if novo_user in df['usuario'].values:
         return False, "Usuário já existe!"
     
+    # Validação para impedir senhas iguais já cadastradas no sistema
+    senha_h = hash_senha(nova_senha)
+    if senha_h in df['senha'].values:
+        return False, "Esta senha já está em uso por outro usuário. Escolha uma senha diferente!"
+    
     novo_df = pd.DataFrame([{
         'usuario': novo_user,
-        'senha': hash_senha(nova_senha),
-        'nome': nome,
+        'senha': senha_h,
+        'nome': nome_limpo,
         'nivel': float(nivel)
     }])
     df = pd.concat([df, novo_df], ignore_index=True)
@@ -118,7 +128,12 @@ def redefinir_senha_usuario(user_alvo, nova_senha, nivel_editor, user_logado):
         if float(nivel_editor) <= nivel_alvo and user_alvo != user_logado:
             return False, "Você não tem permissão para alterar a senha deste usuário!"
 
-        df.loc[df['usuario'] == user_alvo, 'senha'] = hash_senha(nova_senha)
+        # Validação também na redefinição de senha para evitar duplicidade
+        senha_h = hash_senha(nova_senha)
+        if senha_h in df['senha'].values:
+            return False, "Esta senha já está em uso por outro usuário. Escolha uma senha diferente!"
+
+        df.loc[df['usuario'] == user_alvo, 'senha'] = senha_h
         df.to_csv(ARQUIVO_USUARIOS, index=False)
         return True, f"Senha do usuário '{user_alvo}' alterada com sucesso!"
     return False, "Usuário não encontrado!"
@@ -381,7 +396,6 @@ else:
             if nivel_user == 1.0:
                 colunas_nivel_1 = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
                 df_exibicao = df_exibicao[colunas_nivel_1]
-                # Padroniza os status para o motorista enxergar apenas Em Aberto, Em Andamento ou Concluído
                 df_exibicao['Status'] = df_exibicao['Status'].replace({
                     'Aguardando Aprovação': 'Em Aberto',
                     'Aguardando Manutenção': 'Em Aberto'
@@ -504,7 +518,7 @@ else:
                 with col1:
                     st.subheader("➕ Novo Usuário")
                     with st.form("form_novo_user", clear_on_submit=True):
-                        nome_user = st.text_input("Nome Completo")
+                        nome_user = st.text_input("Nome Completo (Nome e Sobrenome)")
                         username = st.text_input("Usuário (Login)").lower()
                         senha_user = st.text_input("Senha", type="password")
                         nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
