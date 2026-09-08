@@ -123,8 +123,11 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
         nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        nivel_editor = float(nivel_editor)
         
-        if float(nivel_editor) <= nivel_alvo:
+        # SuperAdmin (4.0) pode excluir usuários do mesmo nível.
+        # Outros níveis seguem a regra restrita de não excluir nível igual ou superior.
+        if nivel_editor < 4.0 and nivel_editor <= nivel_alvo:
             return False, "Você não tem permissão para excluir um usuário de nível igual ou superior!"
             
         df = df[df['usuario'] != user_alvo]
