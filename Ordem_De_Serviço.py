@@ -90,7 +90,7 @@ def carregar_usuarios():
 
 def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
     if float(nivel) >= 3.5 and float(nivel_criador) < 4.0:
-        return False, "Apenas o SuperAdmin (Nível 4) pode criar usuários Nível 3+ ou Nível 4!"
+        return False, "Apenas o SuperAdmin (Nível 4) pode criar usuários Nível 3.5 ou Nível 4!"
         
     df = carregar_usuarios()
     if novo_user in df['usuario'].values:
@@ -121,7 +121,7 @@ def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
             if nivel_alvo >= 3.5:
                 return False, "Você não tem permissão para alterar o nível deste usuário!"
             if float(novo_nivel) >= 3.5:
-                return False, "Apenas o SuperAdmin (Nível 4) pode promover usuários para Nível 3+ ou Nível 4!"
+                return False, "Apenas o SuperAdmin (Nível 4) pode promover usuários para Nível 3.5 ou Nível 4!"
             
         df.loc[df['usuario'] == user_alvo, 'nivel'] = float(novo_nivel)
         df.to_csv(ARQUIVO_USUARIOS, index=False)
@@ -157,9 +157,9 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
             
         if float(nivel_editor) < 4.0:
             if float(nivel_editor) == 3.5 and nivel_alvo >= 3.5:
-                return False, "Usuários Nível 3+ só podem excluir usuários inferiores!"
+                return False, "Usuários Nível 3.5 só podem excluir usuários inferiores!"
             elif float(nivel_editor) == 3.0:
-                return False, "Apenas usuários de Nível 3+ ou Nível 4 podem excluir contas!"
+                return False, "Apenas usuários de Nível 3.5 ou Nível 4 podem excluir contas!"
             
         df = df[df['usuario'] != user_alvo]
         df.to_csv(ARQUIVO_USUARIOS, index=False)
@@ -286,7 +286,7 @@ else:
     user_data = st.session_state['user_info']
     nivel_user = float(user_data['nivel'])
     usuario_atual = str(user_data['usuario'])
-    lbl_nivel = "3+" if nivel_user == 3.5 else str(int(nivel_user))
+    lbl_nivel = "3.5" if nivel_user == 3.5 else str(int(nivel_user))
 
     # BARRA LATERAL SIMPLIFICADA
     if logo_img:
@@ -307,27 +307,25 @@ else:
 
     df_os = carregar_dados()
 
-    # TELA DO MENU PRINCIPAL (PERMISSÕES SEPARADAS)
+    # TELA DO MENU PRINCIPAL
     if st.session_state['aba_ativa'] == 'Menu':
         st.title("Menu Principal")
         st.caption(f"Bem-vindo, {user_data['nome']}")
         
-        # Nível 1+: Todos podem abrir e consultar
         opcoes = [
             ("📝 Abrir Chamado", "Abrir Chamado"),
             ("🔍 Consultar Chamados", "Consultar Chamados")
         ]
         
-        # Apenas Nível 2.0 (Mecânico) e 4.0 (SuperAdmin) acessam o Painel da Oficina
+        # Apenas Mecânico (2.0) e SuperAdmin (4.0) veem o Painel da Oficina
         if nivel_user == 2.0 or nivel_user == 4.0:
             opcoes.append(("🛠️ Painel da Oficina", "Oficina"))
             
-        # Nível 3.0+ (Coordenadores e SuperAdmin) acessam Triagem e Usuários
+        # Nível 3.0+ acessam Triagem e Usuários
         if nivel_user >= 3.0:
             opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
             opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
 
-        # Exibição dos botões em grade responsiva
         col_m1, col_m2 = st.columns(2)
         
         for idx, (label, chave) in enumerate(opcoes):
@@ -447,7 +445,7 @@ else:
                             st.success("OS excluída!")
                             st.rerun()
 
-        # PÁGINA 3: TRIAGEM (Nível 3+)
+        # PÁGINA 3: TRIAGEM
         elif st.session_state['aba_ativa'] == "Triagem":
             if nivel_user < 3.0:
                 st.error("Acesso não autorizado! Apenas Coordenadores (Nível 3+) possuem acesso à Triagem.")
