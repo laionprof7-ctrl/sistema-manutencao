@@ -5,22 +5,24 @@ import hashlib
 from datetime import datetime, timedelta
 from PIL import Image
 
-# CARREGAMENTO DA LOGO
+# CARREGAMENTO SEGURO DA LOGO LOCAL
+ARQUIVO_LOGO = "logo.png"
 logo_img = None
-if os.path.exists("logo.png"):
+
+if os.path.exists(ARQUIVO_LOGO):
     try:
-        logo_img = Image.open("logo.png")
+        logo_img = Image.open(ARQUIVO_LOGO)
     except Exception:
         logo_img = None
 
-# Configuração da página
+# CONFIGURAÇÃO DA PÁGINA (LOGO COMO FAVICON SE EXISTIR)
 st.set_page_config(
     page_title="Gestão de Manutenção - Copa Ambiental", 
     page_icon=logo_img if logo_img else "🚛", 
     layout="wide"
 )
 
-# OCULTA BARRA SUPERIOR E MENU
+# OCULTA TOTALMENTE A BARRA SUPERIOR, O ÍCONE DO GITHUB E O MENU DO STREAMLIT
 esconder_menu = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -187,6 +189,7 @@ def carregar_dados():
     
     df = pd.read_csv(ARQUIVO_CSV)
     
+    # UNIFICAÇÃO DE COLUNAS
     mapeamento = {
         'Protocolo': 'ID_OS',
         'Data/Hora': 'Data',
@@ -215,6 +218,7 @@ def carregar_dados():
         if col not in df.columns:
             df[col] = ''
             
+    # Tratamento de valores nulos (evita "nan" na interface)
     df = df.fillna({
         'Motorista': 'Não Identificado',
         'Descricao_Problema': 'Sem descrição',
@@ -238,8 +242,9 @@ if 'logged_in' not in st.session_state:
     st.session_state['user_info'] = None
 
 if not st.session_state['logged_in']:
+    # EXIBE A LOGO NA TELA DE LOGIN
     if logo_img:
-        st.image(logo_img, width=300)
+        st.image(logo_img, width=320)
     
     st.title("Gestão de Manutenção | Login do Sistema")
     
@@ -261,6 +266,7 @@ if not st.session_state['logged_in']:
             else:
                 st.error("Usuário ou senha incorretos.")
 else:
+    # BARRA LATERAL COM A LOGO
     if logo_img:
         st.sidebar.image(logo_img, use_container_width=True)
     
@@ -349,9 +355,11 @@ else:
         
         df_exibicao = df_os.copy()
         
+        # Filtro de Arquivados
         status_arq = "Sim" if ver_arquivados == "Chamados Arquivados" else "Não"
         df_exibicao = df_exibicao[df_exibicao['Arquivado'] == status_arq]
         
+        # Filtro de Colunas por Nível
         if nivel_user == 1.0:
             colunas_nivel_1 = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
             df_exibicao = df_exibicao[colunas_nivel_1]
@@ -366,6 +374,7 @@ else:
 
         st.dataframe(df_exibicao, use_container_width=True)
 
+        # RECURSO EXCLUSIVO DO USUÁRIO 4: APAGAR OU ARQUIVAR CHAMADOS
         if nivel_user == 4.0:
             st.markdown("---")
             st.subheader("⚙️ Gestão Avançada de OS (Exclusivo SuperAdmin - Nível 4)")
@@ -420,7 +429,7 @@ else:
                         st.success(f"{row['ID_OS']} aprovada com sucesso!")
                         st.rerun()
 
-    # ABA 4: PAINEL DO MECÂNICO
+    # ABA 4: PAINEL DO MECÂNICO (CATEGORIAS SEPARADAS)
     elif aba_selecionada == "🛠️ Painel do Mecânico":
         st.header("Atendimento de Oficina")
         
