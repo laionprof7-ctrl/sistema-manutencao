@@ -75,7 +75,6 @@ def carregar_usuarios():
 def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
     df = carregar_usuarios()
     
-    # Validação de Nome e Sobrenome (exige pelo menos um espaço)
     nome_limpo = nome.strip()
     if " " not in nome_limpo:
         return False, "Por favor, digite o Nome e o Sobrenome completo!"
@@ -86,7 +85,6 @@ def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
     if novo_user in df['usuario'].values:
         return False, "Usuário já existe!"
     
-    # Validação para impedir senhas iguais já cadastradas no sistema
     senha_h = hash_senha(nova_senha)
     if senha_h in df['senha'].values:
         return False, "Esta senha já está em uso por outro usuário. Escolha uma senha diferente!"
@@ -128,7 +126,6 @@ def redefinir_senha_usuario(user_alvo, nova_senha, nivel_editor, user_logado):
         if float(nivel_editor) <= nivel_alvo and user_alvo != user_logado:
             return False, "Você não tem permissão para alterar a senha deste usuário!"
 
-        # Validação também na redefinição de senha para evitar duplicidade
         senha_h = hash_senha(nova_senha)
         if senha_h in df['senha'].values:
             return False, "Esta senha já está em uso por outro usuário. Escolha uma senha diferente!"
@@ -315,14 +312,23 @@ else:
             opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
             opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
 
+        # Adiciona a opção de Sair também no Menu Principal
+        opcoes.append(("🚪 Sair / Logout", "Logout"))
+
         col_m1, col_m2 = st.columns(2)
         
         for idx, (label, chave) in enumerate(opcoes):
             coluna = col_m1 if idx % 2 == 0 else col_m2
             with coluna:
                 if st.button(label, key=f"btn_menu_{chave}", use_container_width=True):
-                    st.session_state['aba_ativa'] = chave
-                    st.rerun()
+                    if chave == "Logout":
+                        st.session_state['logged_in'] = False
+                        st.session_state['user_info'] = None
+                        st.session_state['aba_ativa'] = 'Menu'
+                        st.rerun()
+                    else:
+                        st.session_state['aba_ativa'] = chave
+                        st.rerun()
 
     # PÁGINAS INTERNAS
     else:
