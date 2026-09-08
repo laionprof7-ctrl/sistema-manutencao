@@ -166,17 +166,31 @@ def limpar_chamados_expirados(df):
     if df.empty or 'Data' not in df.columns:
         return df
     agora = datetime.now(FUSO_BR)
-    indices_para_remover = []
+    alterou = False
     for idx, row in df.iterrows():
+        # Regra de expiração para chamados não aprovados após 7 dias
         if str(row.get('Aprovado_Coordenador', 'Não')).strip() == 'Não':
             try:
                 data_chamado = datetime.strptime(str(row['Data']), '%d/%m/%Y %H:%M').replace(tzinfo=FUSO_BR)
                 if agora - data_chamado > timedelta(days=7):
-                    indices_para_remover.append(idx)
+                    df = df.drop(index=idx)
+                    alterou = True
             except Exception:
                 pass
-    if indices_para_remover:
-        df = df.drop(index=indices_para_remover).reset_index(drop=True)
+        
+        # Regra solicitada: Se concluídos há mais de 7 dias, transferir automaticamente para a área de arquivados
+        if str(row.get('Status', '')).strip() == 'Concluído' and str(row.get('Arquivado', 'Não')).strip() == 'Não':
+            data_lib = str(row.get('Data_Liberacao', '')).strip()
+            if data_lib:
+                try:
+                    dt_lib = datetime.strptime(data_lib, '%d/%m/%Y %H:%M').replace(tzinfo=FUSO_BR)
+                    if agora - dt_lib > timedelta(days=7):
+                        df.at[idx, 'Arquivado'] = 'Sim'
+                        alterou = True
+                except Exception:
+                    pass
+    if alterou:
+        df = df.reset_index(drop=True)
         salvar_dados(df)
     return df
 
@@ -214,7 +228,6 @@ def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False)
 
 def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
-    # Carrega o modelo de papel timbrado existente para preservar cabeçalhos, rodapés e formatação padrão
     if os.path.exists(ARQUIVO_PAPEL_TIMBRADO):
         try:
             doc = Document(ARQUIVO_PAPEL_TIMBRADO)
@@ -223,7 +236,6 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     else:
         doc = Document()
     
-    # Adiciona o título no corpo do documento carregado
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_tit = p_titulo.add_run("RELATÓRIO DE MANUTENÇÃO DO VEÍCULO")
@@ -261,7 +273,6 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     estilos_disponiveis = [s.name for s in doc.styles]
     sub_style = 'List Bullet 2' if 'List Bullet 2' in estilos_disponiveis else 'List Bullet'
 
-    # Adiciona cada chamado utilizando listas com marcadores limpos e sem duplicidade no corpo do timbrado
     for _, row in df_rel.iterrows():
         p_os_titulo = doc.add_paragraph(style='List Bullet')
         run_os_num = p_os_titulo.add_run(f"Ordem de Serviço: {str(row.get('ID_OS', ''))}")
@@ -276,7 +287,7 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
         doc.add_paragraph(f"Data de Liberação: {formatar_data_hora(row.get('Data_Liberacao', ''))}", style=sub_style)
         doc.add_paragraph(f"Descrição do Problema: {str(row.get('Descricao_Problema', ''))}", style=sub_style)
         
-        doc.add_paragraph() # Espaçador entre os chamados
+        doc.add_paragraph()
 
     f = io.BytesIO()
     doc.save(f)
@@ -459,7 +470,6 @@ else:
 
             st.dataframe(df_exibicao, use_container_width=True)
 
-            # Seção de Relatório Individual por Veículo/Equipamento para Níveis 3.0+
             if nivel_user >= 3.0:
                 st.markdown("")
                 with st.container(border=True):
@@ -568,7 +578,19 @@ else:
                                 st.write(f"**Solicitante:** {row['Motorista']} | **Data do Registro:** {row['Data']}")
                                 st.write(f"**Problema:** {row['Descricao_Problema']}")
                                 
-                                novo_status = st.selectbox("Status", ["Aguardando Manutenção", "Em Andamento", "Concluído"], index=["Aguardando Manutenção", "Em Andamento", "Concluído"].index(row['Status']) if row['Status'] in ["Aguardando Manutenção", "Em Andamento", "Concluído"] else 0, key=f"st_{idx}")
+                                status_atual = str(row['Status']).strip()
+                                
+                                # Regra: Unidirecional (O chamado não pode retornar de etapa)
+                                # Ordem lógica: 'Aguardando Manutenção' -> 'Em Andamento' -> 'Concluído'
+                                if status_atual == 'Aguardando Manutenção':
+                                    opcoes_status = ["Aguardando Manutenção", "Em Andamento", "Concluído"]
+                                elif status_atual == 'Em Andamento':
+                                    opcoes_status = ["Em Andamento", "Concluído"]
+                                else:  # Concluído
+                                    opcoes_status = ["Concluído"]
+                                
+                                idx_default = 0
+                                novo_status = st.selectbox("Status / Etapa", opcoes_status, index=idx_default, key=f"st_{idx}")
                                 
                                 mec_atual = str(row['Mecanico_Responsavel']).strip()
                                 mec_bloqueado = mec_atual and mec_atual != 'Não Atribuído' and mec_atual != ''
@@ -580,45 +602,37 @@ else:
                                 else:
                                     mecanico = st.text_input("Mecânico Responsável", value="", key=f"mec_{idx}")
                                 
-                                chave_confirma = f"confirma_mec_{idx}"
+                                chave_confirma = f"confirma_transicao_{idx}"
                                 if chave_confirma not in st.session_state:
                                     st.session_state[chave_confirma] = False
 
-                                if st.button(f"Salvar Alterações", key=f"btn_m_{idx}", use_container_width=True):
-                                    if not mec_bloqueado:
-                                        if not mecanico or mecanico.strip() == '' or mecanico == 'Não Atribuído':
-                                            st.warning("Informe o nome do mecânico responsável.")
-                                        else:
-                                            st.session_state[chave_confirma] = True
-                                            st.session_state[f"temp_mec_{idx}"] = mecanico.strip()
-                                            st.session_state[f"temp_status_{idx}"] = novo_status
-                                            st.rerun()
+                                # Botão que aciona a janela de confirmação de transição de etapa
+                                if st.button(f"Salvar Alterações / Avançar Etapa", key=f"btn_m_{idx}", use_container_width=True):
+                                    if not mec_bloqueado and (not mecanico or mecanico.strip() == '' or mecanico == 'Não Atribuído'):
+                                        st.warning("Informe o nome do mecânico responsável.")
                                     else:
-                                        df_os.at[idx, 'Status'] = novo_status
-                                        if novo_status == 'Concluído' and not str(row['Data_Liberacao']).strip():
-                                            df_os.at[idx, 'Data_Liberacao'] = agora_brasil()
-                                        elif novo_status != 'Concluído':
-                                            df_os.at[idx, 'Data_Liberacao'] = ''
-                                        salvar_dados(df_os)
-                                        st.success("Atualizado com sucesso!")
+                                        st.session_state[chave_confirma] = True
+                                        st.session_state[f"temp_mec_{idx}"] = mecanico.strip() if not mec_bloqueado else mec_atual
+                                        st.session_state[f"temp_status_{idx}"] = novo_status
                                         st.rerun()
 
+                                # Janela/Popup de Confirmação pedida pelo usuário ("tem certeza que quer adicionar...")
                                 if st.session_state.get(chave_confirma, False):
-                                    nome_temp = st.session_state[f"temp_mec_{idx}"]
-                                    st.warning(f"⚠️ **Atribuir {nome_temp} a função?** (Esta ação bloqueará a alteração futura do mecânico).")
+                                    etapa_destino = st.session_state[f"temp_status_{idx}"]
+                                    st.warning(f"⚠️ **Tem certeza que deseja avançar o chamado para a etapa [{etapa_destino}]?** (Atenção: o fluxo é unidirecional e não poderá retornar).")
                                     col_conf1, col_conf2 = st.columns(2)
                                     with col_conf1:
                                         if st.button("✅ Sim, Confirmar", key=f"sim_{idx}", use_container_width=True):
-                                            df_os.at[idx, 'Status'] = st.session_state[f"temp_status_{idx}"]
-                                            df_os.at[idx, 'Mecanico_Responsavel'] = nome_temp
+                                            df_os.at[idx, 'Status'] = etapa_destino
+                                            if not mec_bloqueado:
+                                                df_os.at[idx, 'Mecanico_Responsavel'] = st.session_state[f"temp_mec_{idx}"]
                                             
-                                            st_fin = st.session_state[f"temp_status_{idx}"]
-                                            if st_fin == 'Concluído' and not str(row['Data_Liberacao']).strip():
+                                            if etapa_destino == 'Concluído' and not str(row['Data_Liberacao']).strip():
                                                 df_os.at[idx, 'Data_Liberacao'] = agora_brasil()
                                             
                                             salvar_dados(df_os)
                                             st.session_state[chave_confirma] = False
-                                            st.success("Mecânico atribuído e bloqueado com sucesso!")
+                                            st.success("Chamado atualizado e avançado com sucesso!")
                                             st.rerun()
                                     with col_conf2:
                                         if st.button("❌ Cancelar", key=f"nao_{idx}", use_container_width=True):
@@ -672,101 +686,4 @@ else:
                         ]
 
                     st.markdown("")
-                    st.dataframe(
-                        df_filtrado[['ID_OS', 'Data', 'Veiculo', 'Placa', 'Status', 'Prioridade', 'Mecanico_Responsavel', 'Data_Liberacao']], 
-                        use_container_width=True
-                    )
-
-        # PÁGINA 5: GESTÃO DE USUÁRIOS
-        elif st.session_state['aba_ativa'] == "Usuarios":
-            if nivel_user < 3.5:
-                st.error("Acesso não autorizado!")
-            else:
-                st.header("👤 Gestão de Usuários")
-                opcoes_nivel = ["1 - Motorista", "2 - Operacional", "3 - Coordenador"]
-                if nivel_user >= 4.0:
-                    opcoes_nivel.append("3.5 - Coordenador Plus")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("➕ Novo Usuário")
-                    with st.form("form_novo_user", clear_on_submit=True):
-                        nome_user = st.text_input("Nome Completo")
-                        username = st.text_input("Usuário (Login)").lower()
-                        senha_user = st.text_input("Senha", type="password")
-                        nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
-                        btn_cadastrar = st.form_submit_button("Cadastrar", use_container_width=True)
-
-                        if btn_cadastrar:
-                            if username and senha_user and nome_user:
-                                num_nivel = float(nivel_acesso.split(" - ")[0])
-                                sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
-                                if sucesso:
-                                    st.success(msg)
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
-                            else:
-                                st.warning("Preencha todos os campos.")
-
-                with col2:
-                    st.subheader("⚙️ Gerenciar Usuário")
-                    df_u = carregar_usuarios()
-                    if df_u.empty:
-                        st.info("Nenhum usuário cadastrado.")
-                    else:
-                        opcoes_select = []
-                        mapa_usuarios = {}
-                        for _, r in df_u.iterrows():
-                            nome_limpo = str(r['nome']).replace("SuperAdmin", "").strip()
-                            rotulo = f"{nome_limpo} ({r['usuario']})"
-                            opcoes_select.append(rotulo)
-                            mapa_usuarios[rotulo] = r['usuario']
-
-                        user_selecionado_rotulo = st.selectbox("Selecione o Usuário", opcoes_select)
-                        user_selecionado = mapa_usuarios[user_selecionado_rotulo]
-                        
-                        if user_selecionado:
-                            dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
-                            st.write(f"**Nome:** {dados_u['nome']} | **Usuário:** `{dados_u['usuario']}` | **Nível:** {dados_u['nivel']}")
-                            
-                            with st.expander("Alterar Nome"):
-                                novo_nome_input = st.text_input("Novo Nome Completo", value=str(dados_u['nome']), key=f"nome_{user_selecionado}")
-                                if st.button("Salvar Novo Nome", use_container_width=True):
-                                    sucesso, msg = atualizar_nome_usuario(user_selecionado, novo_nome_input, nivel_user)
-                                    if sucesso:
-                                        st.success(msg); st.rerun()
-                                    else:
-                                        st.error(msg)
-
-                            with st.expander("Alterar Nível"):
-                                novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_nn")
-                                if st.button("Salvar Nível", use_container_width=True):
-                                    num_n = float(novo_niv.split(" - ")[0])
-                                    sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
-                                    if sucesso:
-                                        st.success(msg); st.rerun()
-                                    else:
-                                        st.error(msg)
-
-                            with st.expander("Redefinir Senha"):
-                                nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
-                                if st.button("Atualizar Senha", use_container_width=True):
-                                    if nova_senha:
-                                       sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
-                                       if sucesso:
-                                           st.success(msg); st.rerun()
-                                       else:
-                                           st.error(msg)
-
-                            with st.expander("Excluir Conta"):
-                                if st.button("Confirmar Exclusão", type="primary", use_container_width=True):
-                                    sucesso, msg = excluir_usuario(user_selecionado, usuario_atual, nivel_user)
-                                    if sucesso:
-                                        st.success(msg); st.rerun()
-                                    else:
-                                        st.error(msg)
-
-                st.markdown("---")
-                if not df_u.empty:
-                    st.dataframe(df_u[['usuario', 'nome', 'nivel']], use_container_width=True)
+                    st.dataframe(df_filtrado, use_container_width=True)
