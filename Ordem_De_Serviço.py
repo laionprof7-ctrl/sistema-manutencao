@@ -16,6 +16,9 @@ st.set_page_config(
     layout="wide"
 )
 
+# Nome do arquivo da logo (Certifique-se de subir este arquivo na raiz do GitHub)
+ARQ_LOGO = "logo.png"
+
 # Caminhos dos Arquivos CSV (Persistência Flat-File)
 ARQ_USUARIOS = "usuarios.csv"
 ARQ_CHAMADOS = "chamados_manutencao.csv"
@@ -110,8 +113,12 @@ if 'logged_in' not in st.session_state:
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("## 🌿 Copa Ambiental")
-        st.markdown("### Sistema Integrado de Gestão de Manutenção de Frota")
+        if os.path.exists(ARQ_LOGO):
+            st.image(ARQ_LOGO, width=220)
+        else:
+            st.markdown("## 🌿 Copa Ambiental")
+            
+        st.markdown("### Sistema de Gestão de Manutenção de Frota")
         st.markdown("---")
         
         usuario_input = st.text_input("Usuário")
@@ -134,7 +141,10 @@ if not st.session_state.logged_in:
 else:
     # Sistema Principal (Pós-Login)
     user = st.session_state.user_info
-    st.sidebar.markdown("### 🌿 Copa Ambiental")
+    
+    if os.path.exists(ARQ_LOGO):
+        st.sidebar.image(ARQ_LOGO, width=160)
+    
     st.sidebar.markdown(f"**Usuário:** {user['usuario']}")
     st.sidebar.markdown(f"**Nível de Acesso:** {user['nivel']}")
     st.sidebar.markdown("---")
