@@ -307,7 +307,7 @@ else:
 
     df_os = carregar_dados()
 
-    # TELA DO MENU PRINCIPAL (PERMISSÕES AJUSTADAS)
+    # TELA DO MENU PRINCIPAL (PERMISSÕES SEPARADAS)
     if st.session_state['aba_ativa'] == 'Menu':
         st.title("Menu Principal")
         st.caption(f"Bem-vindo, {user_data['nome']}")
@@ -318,11 +318,11 @@ else:
             ("🔍 Consultar Chamados", "Consultar Chamados")
         ]
         
-        # Nível 2+: Operacional / Mecânicos ganham o painel da oficina
-        if nivel_user >= 2.0:
+        # Apenas Nível 2.0 (Mecânico) e 4.0 (SuperAdmin) acessam o Painel da Oficina
+        if nivel_user == 2.0 or nivel_user == 4.0:
             opcoes.append(("🛠️ Painel da Oficina", "Oficina"))
             
-        # Nível 3+: Coordenadores e SuperAdmins ganham a Triagem e Prioridades
+        # Nível 3.0+ (Coordenadores e SuperAdmin) acessam Triagem e Usuários
         if nivel_user >= 3.0:
             opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
             opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
@@ -472,38 +472,41 @@ else:
                                 st.success(f"{row['ID_OS']} aprovada!")
                                 st.rerun()
 
-        # PÁGINA 4: OFICINA
+        # PÁGINA 4: OFICINA (Apenas Nível 2.0 e 4.0)
         elif st.session_state['aba_ativa'] == "Oficina":
-            st.header("🛠️ Painel da Oficina")
-            aprovados = df_os[(df_os['Aprovado_Coordenador'] == 'Sim') & (df_os['Arquivado'] != 'Sim')]
-            
-            aba_pend, aba_and, aba_conc = st.tabs(["⏳ Em Aberto", "🔄 Em Andamento", "✅ Concluídos"])
-            
-            def renderizar_cards(df_sub, aba_nome):
-                if df_sub.empty:
-                    st.info(f"Nenhum chamado em '{aba_nome}'.")
-                else:
-                    for idx, row in df_sub.iterrows():
-                        with st.expander(f"[{row['Prioridade']}] {row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
-                            st.write(f"**Solicitante:** {row['Motorista']} | **Data:** {row['Data']}")
-                            st.write(f"**Problema:** {row['Descricao_Problema']}")
-                            
-                            novo_status = st.selectbox("Status", ["Aguardando Manutenção", "Em Andamento", "Concluído"], index=["Aguardando Manutenção", "Em Andamento", "Concluído"].index(row['Status']) if row['Status'] in ["Aguardando Manutenção", "Em Andamento", "Concluído"] else 0, key=f"st_{idx}")
-                            mecanico = st.text_input("Mecânico Responsável", value=row['Mecanico_Responsavel'], key=f"mec_{idx}")
-                            
-                            if st.button(f"Salvar Alterações", key=f"btn_m_{idx}", use_container_width=True):
-                                df_os.at[idx, 'Status'] = novo_status
-                                df_os.at[idx, 'Mecanico_Responsavel'] = mecanico
-                                salvar_dados(df_os)
-                                st.success("Atualizado!")
-                                st.rerun()
+            if nivel_user != 2.0 and nivel_user != 4.0:
+                st.error("Acesso não autorizado! O Painel da Oficina é exclusivo para o Nível 2.0 (Mecânicos/Oficina).")
+            else:
+                st.header("🛠️ Painel da Oficina")
+                aprovados = df_os[(df_os['Aprovado_Coordenador'] == 'Sim') & (df_os['Arquivado'] != 'Sim')]
+                
+                aba_pend, aba_and, aba_conc = st.tabs(["⏳ Em Aberto", "🔄 Em Andamento", "✅ Concluídos"])
+                
+                def renderizar_cards(df_sub, aba_nome):
+                    if df_sub.empty:
+                        st.info(f"Nenhum chamado em '{aba_nome}'.")
+                    else:
+                        for idx, row in df_sub.iterrows():
+                            with st.expander(f"[{row['Prioridade']}] {row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                                st.write(f"**Solicitante:** {row['Motorista']} | **Data:** {row['Data']}")
+                                st.write(f"**Problema:** {row['Descricao_Problema']}")
+                                
+                                novo_status = st.selectbox("Status", ["Aguardando Manutenção", "Em Andamento", "Concluído"], index=["Aguardando Manutenção", "Em Andamento", "Concluído"].index(row['Status']) if row['Status'] in ["Aguardando Manutenção", "Em Andamento", "Concluído"] else 0, key=f"st_{idx}")
+                                mecanico = st.text_input("Mecânico Responsável", value=row['Mecanico_Responsavel'], key=f"mec_{idx}")
+                                
+                                if st.button(f"Salvar Alterações", key=f"btn_m_{idx}", use_container_width=True):
+                                    df_os.at[idx, 'Status'] = novo_status
+                                    df_os.at[idx, 'Mecanico_Responsavel'] = mecanico
+                                    salvar_dados(df_os)
+                                    st.success("Atualizado!")
+                                    st.rerun()
 
-            with aba_pend:
-                renderizar_cards(aprovados[aprovados['Status'] == 'Aguardando Manutenção'], "Em Aberto")
-            with aba_and:
-                renderizar_cards(aprovados[aprovados['Status'] == 'Em Andamento'], "Em Andamento")
-            with aba_conc:
-                renderizar_cards(aprovados[aprovados['Status'] == 'Concluído'], "Concluídos")
+                with aba_pend:
+                    renderizar_cards(aprovados[aprovados['Status'] == 'Aguardando Manutenção'], "Em Aberto")
+                with aba_and:
+                    renderizar_cards(aprovados[aprovados['Status'] == 'Em Andamento'], "Em Andamento")
+                with aba_conc:
+                    renderizar_cards(aprovados[aprovados['Status'] == 'Concluído'], "Concluídos")
 
         # PÁGINA 5: GESTÃO DE USUÁRIOS
         elif st.session_state['aba_ativa'] == "Usuarios":
