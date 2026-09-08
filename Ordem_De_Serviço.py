@@ -214,7 +214,6 @@ def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False)
 
 def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
-    # Carrega o papel timbrado se existir, senão cria um documento em branco
     if os.path.exists(ARQUIVO_PAPEL_TIMBRADO):
         try:
             doc = Document(ARQUIVO_PAPEL_TIMBRADO)
@@ -257,14 +256,21 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
             except Exception:
                 return val_str
 
-    # Adiciona cada chamado utilizando listas com marcadores (bullet points)
+    estilos_disponiveis = [s.name for s in doc.styles]
+
+    # Adiciona cada chamado utilizando listas com marcadores limpos
     for _, row in df_rel.iterrows():
         p_os_titulo = doc.add_paragraph(style='List Bullet')
         run_os_num = p_os_titulo.add_run(f"Ordem de Serviço: {str(row.get('ID_OS', ''))}")
         run_os_num.bold = True
         
-        doc.add_paragraph(f"• Veículo / Equipamento: {str(row.get('Veiculo', ''))}", style='List Bullet 2') if 'List Bullet 2' in [s.name for s in doc.styles] else doc.add_paragraph(f"    - Veículo / Equipamento: {str(row.get('Veiculo', ''))}")
-        doc.add_paragraph(f"• Identificação / Placa: {str(row.get('Placa', ''))}", style='List Bullet 2') if 'List Bullet 2' in [s.name for s in doc.styles] else doc.add_paragraph(f"    - Identificação / Placa: {str(row.get('Placa', ''))}")
+        if 'List Bullet 2' in estilos_disponiveis:
+            doc.add_paragraph(f"• Veículo / Equipamento: {str(row.get('Veiculo', ''))}", style='List Bullet 2')
+            doc.add_paragraph(f"• Identificação / Placa: {str(row.get('Placa', ''))}", style='List Bullet 2')
+        else:
+            doc.add_paragraph(f"    - Veículo / Equipamento: {str(row.get('Veiculo', ''))}")
+            doc.add_paragraph(f"    - Identificação / Placa: {str(row.get('Placa', ''))}")
+
         doc.add_paragraph(f"• Data do Registro: {formatar_data_hora(row.get('Data', ''))}")
         doc.add_paragraph(f"• Data de Aprovação: {formatar_data_hora(row.get('Data_Aprovacao', ''))}")
         doc.add_paragraph(f"• Prioridade: {str(row.get('Prioridade', ''))}")
