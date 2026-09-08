@@ -214,7 +214,6 @@ def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False)
 
 def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
-    # Carrega o modelo de papel timbrado existente para preservar cabeçalhos, rodapés e formatação padrão
     if os.path.exists(ARQUIVO_PAPEL_TIMBRADO):
         try:
             doc = Document(ARQUIVO_PAPEL_TIMBRADO)
@@ -223,7 +222,6 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     else:
         doc = Document()
     
-    # Adiciona o título no corpo do documento carregado
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_tit = p_titulo.add_run("RELATÓRIO DE MANUTENÇÃO DO VEÍCULO")
@@ -261,7 +259,6 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     estilos_disponiveis = [s.name for s in doc.styles]
     sub_style = 'List Bullet 2' if 'List Bullet 2' in estilos_disponiveis else 'List Bullet'
 
-    # Adiciona cada chamado utilizando listas com marcadores limpos e sem duplicidade no corpo do timbrado
     for _, row in df_rel.iterrows():
         p_os_titulo = doc.add_paragraph(style='List Bullet')
         run_os_num = p_os_titulo.add_run(f"Ordem de Serviço: {str(row.get('ID_OS', ''))}")
@@ -276,7 +273,7 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
         doc.add_paragraph(f"Data de Liberação: {formatar_data_hora(row.get('Data_Liberacao', ''))}", style=sub_style)
         doc.add_paragraph(f"Descrição do Problema: {str(row.get('Descricao_Problema', ''))}", style=sub_style)
         
-        doc.add_paragraph() # Espaçador entre os chamados
+        doc.add_paragraph()
 
     f = io.BytesIO()
     doc.save(f)
@@ -459,7 +456,6 @@ else:
 
             st.dataframe(df_exibicao, use_container_width=True)
 
-            # Seção de Relatório Individual por Veículo/Equipamento para Níveis 3.0+
             if nivel_user >= 3.0:
                 st.markdown("")
                 with st.container(border=True):
