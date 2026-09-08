@@ -27,16 +27,16 @@ ARQ_CHAMADOS = "chamados_manutencao.csv"
 def gerar_hash(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
 
-# Inicialização de Dados Padrão (Caso os arquivos não existam)
+# Inicialização de Dados Padrão (Forçando os níveis e credenciais corretos)
 def inicializar_dados():
-    if not os.path.exists(ARQ_USUARIOS):
-        df_usuarios = pd.DataFrame([
-            {"usuario": "admin", "senha": gerar_hash("admin123"), "nivel": 4.0},
-            {"usuario": "coordenacao", "senha": gerar_hash("coord123"), "nivel": 3.0},
-            {"usuario": "mecanico", "senha": gerar_hash("meca123"), "nivel": 2.0},
-            {"usuario": "motorista", "senha": gerar_hash("moto123"), "nivel": 1.0}
-        ])
-        df_usuarios.to_csv(ARQ_USUARIOS, index=False)
+    # Se quiser forçar a recriação dos usuários com os níveis certos, garantimos a base correta:
+    df_usuarios = pd.DataFrame([
+        {"usuario": "admin", "senha": gerar_hash("admin123"), "nivel": 4.0},
+        {"usuario": "coordenacao", "senha": gerar_hash("coord123"), "nivel": 3.0},
+        {"usuario": "mecanico", "senha": gerar_hash("meca123"), "nivel": 2.0},
+        {"usuario": "motorista", "senha": gerar_hash("moto123"), "nivel": 1.0}
+    ])
+    df_usuarios.to_csv(ARQ_USUARIOS, index=False)
 
     if not os.path.exists(ARQ_CHAMADOS):
         df_chamados = pd.DataFrame(columns=[
@@ -158,8 +158,16 @@ else:
     
     df_chamados = pd.read_csv(ARQ_CHAMADOS)
 
-    # Abas por perfil / funcionalidade
-    aba_opcao = st.sidebar.radio("Navegação", ["Consultar / Ficha OS", "Abertura de Chamado", "Painel da Oficina (Mecânico)", "Coordenação / Triagem", "Gestão de Usuários"])
+    # Definição dinâmica do menu de acordo com o nível real de acesso logado
+    opcoes_menu = ["Consultar / Ficha OS", "Abertura de Chamado"]
+    if user['nivel'] >= 2.0:
+        opcoes_menu.append("Painel da Oficina (Mecânico)")
+    if user['nivel'] >= 3.0:
+        opcoes_menu.append("Coordenação / Triagem")
+    if user['nivel'] >= 4.0:
+        opcoes_menu.append("Gestão de Usuários")
+
+    aba_opcao = st.sidebar.radio("Navegação", opcoes_menu)
 
     if aba_opcao == "Consultar / Ficha OS":
         st.header("📋 Consulta de Ordens de Serviço e Emissão de Ficha")
