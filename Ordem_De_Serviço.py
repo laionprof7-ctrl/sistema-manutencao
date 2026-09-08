@@ -547,11 +547,12 @@ else:
                     if df_u.empty:
                         st.info("Nenhum usuário cadastrado.")
                     else:
-                        # Monta uma lista amigável exibindo: "Nome Completo (usuario)"
+                        # Monta uma lista amigável limpando termos extras e exibindo: "Nome (usuario)"
                         opcoes_select = []
                         mapa_usuarios = {}
                         for _, r in df_u.iterrows():
-                            rotulo = f"{r['nome']} ({r['usuario']})"
+                            nome_limpo = str(r['nome']).replace("(SuperAdmin)", "").replace("SuperAdmin", "").strip()
+                            rotulo = f"{nome_limpo} ({r['usuario']})"
                             opcoes_select.append(rotulo)
                             mapa_usuarios[rotulo] = r['usuario']
 
