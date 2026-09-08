@@ -75,8 +75,6 @@ def carregar_usuarios():
 def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
     df = carregar_usuarios()
     
-    # Restrição absoluta: Apenas SuperAdmin (4.0) pode ser criado manualmente se necessário, 
-    # mas bloqueamos a criação de novos níveis 4.0 caso já exista algum ou para garantir unicidade do Laion.
     if float(nivel) >= 4.0:
         return False, "Não é permitido cadastrar novos usuários de nível 4.0!"
 
@@ -101,7 +99,6 @@ def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
     if user_alvo in df['usuario'].values:
         nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
         
-        # Ninguém pode alterar o nível para 4.0 ou alterar o nível de um usuário 4.0
         if float(novo_nivel) >= 4.0 or nivel_alvo >= 4.0:
             return False, "Não é permitido atribuir ou alterar níveis de Administrador Global (4.0)!"
         
@@ -134,7 +131,6 @@ def excluir_usuario(user_alvo, user_logado, nivel_editor):
     if user_alvo in df['usuario'].values:
         nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
         
-        # Bloqueio total para impedir a exclusão de qualquer usuário de nível 4.0 (SuperAdmin)
         if nivel_alvo >= 4.0:
             return False, "Não é permitido excluir usuários com nível de Administrador Global (4.0)!"
         
@@ -385,6 +381,11 @@ else:
             if nivel_user == 1.0:
                 colunas_nivel_1 = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
                 df_exibicao = df_exibicao[colunas_nivel_1]
+                # Padroniza os status para o motorista enxergar apenas Em Aberto, Em Andamento ou Concluído
+                df_exibicao['Status'] = df_exibicao['Status'].replace({
+                    'Aguardando Aprovação': 'Em Aberto',
+                    'Aguardando Manutenção': 'Em Aberto'
+                })
                 df_exibicao.columns = ['Nº OS', 'Data', 'Veículo', 'Placa', 'Descrição', 'Status']
             else:
                 colunas_gestao = ['ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status', 'Prioridade', 'Mecanico_Responsavel']
@@ -491,7 +492,6 @@ else:
             else:
                 st.header("👤 Gestão de Usuários")
                 
-                # Apenas níveis 1 a 3 disponíveis para novos cadastros (nível 4.0/Administrador Global bloqueado)
                 opcoes_nivel = [
                     "1 - Motorista",
                     "2 - Operacional",
@@ -499,7 +499,6 @@ else:
                 ]
                 if nivel_user >= 4.0:
                     opcoes_nivel.append("3.5 - Coordenador Plus")
-                    # Nível 4 foi removido das opções de cadastro para garantir unicidade do Administrador
                 
                 col1, col2 = st.columns(2)
                 with col1:
