@@ -118,6 +118,27 @@ def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
         return True, f"Nível do usuário '{user_alvo}' atualizado com sucesso!"
     return False, "Usuário não encontrado!"
 
+def atualizar_nome_usuario(user_alvo, novo_nome, nivel_editor):
+    if float(nivel_editor) < 3.5:
+        return False, "Você não tem permissão para alterar o nome de usuários!"
+    
+    nome_limpo = novo_nome.strip()
+    if " " not in nome_limpo:
+        return False, "Por favor, digite o Nome e o Sobrenome completo!"
+
+    df = carregar_usuarios()
+    if user_alvo in df['usuario'].values:
+        nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
+        # Coordenador Plus (3.5) não pode alterar nome de SuperAdmin (4.0)
+        if float(nivel_editor) < 4.0 and nivel_alvo >= 4.0:
+            return False, "Você não tem permissão para alterar o nome de um Administrador Global!"
+
+        df.loc[df['usuario'] == user_alvo, 'nome'] = nome_limpo
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return True, f"Nome do usuário '{user_alvo}' atualizado com sucesso!"
+    return False, "Usuário não encontrado!"
+
 def redefinir_senha_usuario(user_alvo, nova_senha, nivel_editor, user_logado):
     df = carregar_usuarios()
     if user_alvo in df['usuario'].values:
@@ -506,8 +527,8 @@ else:
 
         # PÁGINA 5: GESTÃO DE USUÁRIOS
         elif st.session_state['aba_ativa'] == "Usuarios":
-            if nivel_user < 3.0:
-                st.error("Acesso não autorizado! Apenas Nível 3+ possui acesso à Gestão de Usuários.")
+            if nivel_user < 3.5:
+                st.error("Acesso não autorizado! Apenas Coordenadores Plus (3.5+) e SuperAdmin possuem acesso à Gestão de Usuários.")
             else:
                 st.header("👤 Gestão de Usuários")
                 
@@ -563,6 +584,15 @@ else:
                             dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
                             st.write(f"**Nome:** {dados_u['nome']} | **Usuário:** `{dados_u['usuario']}` | **Nível:** {dados_u['nivel']}")
                             
+                            with st.expander("Alterar Nome"):
+                                novo_nome_input = st.text_input("Novo Nome Completo", value=str(dados_u['nome']), key=f"nome_{user_selecionado}")
+                                if st.button("Salvar Novo Nome", use_container_width=True):
+                                    sucesso, msg = atualizar_nome_usuario(user_selecionado, novo_nome_input, nivel_user)
+                                    if sucesso:
+                                        st.success(msg); st.rerun()
+                                    else:
+                                        st.error(msg)
+
                             with st.expander("Alterar Nível"):
                                 novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_nn")
                                 if st.button("Salvar Nível", use_container_width=True):
