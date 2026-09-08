@@ -751,7 +751,7 @@ else:
 
                             with st.expander("Redefinir Senha"):
                                 nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
-                                if st.button("Atualizar Senha", use_keyword=True, use_container_width=True):
+                                if st.button("Atualizar Senha", use_container_width=True):
                                     if nova_senha:
                                        sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
                                        if sucesso:
