@@ -200,7 +200,8 @@ def limpar_chamados_expirados(df):
 def carregar_dados():
     colunas_obrigatorias = [
         'ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 
-        'Descricao_Problema', 'Status', 'Prioridade', 'Aprovado_Coordenador', 'Mecanico_Responsavel', 'Arquivado'
+        'Descricao_Problema', 'Status', 'Prioridade', 'Aprovado_Coordenador', 
+        'Data_Aprovacao', 'Mecanico_Responsavel', 'Data_Liberacao', 'Arquivado'
     ]
     
     if not os.path.exists(ARQUIVO_CSV):
@@ -209,19 +210,6 @@ def carregar_dados():
         return df
     
     df = pd.read_csv(ARQUIVO_CSV)
-    
-    mapeamento = {
-        'Protocolo': 'ID_OS',
-        'Data/Hora': 'Data',
-        'Modelo': 'Veiculo',
-        'Anamalia_Texto': 'Descricao_Problema'
-    }
-    
-    for antiga, nova in mapeamento.items():
-        if antiga in df.columns:
-            if nova not in df.columns or df[nova].isnull().all():
-                df[nova] = df[antiga]
-            df.drop(columns=[antiga], inplace=True)
 
     if 'Aprovado_Coordenador' not in df.columns:
         df['Aprovado_Coordenador'] = 'Sim'
@@ -231,6 +219,10 @@ def carregar_dados():
         df['Mecanico_Responsavel'] = 'Não Atribuído'
     if 'Motorista' not in df.columns:
         df['Motorista'] = 'Não Identificado'
+    if 'Data_Aprovacao' not in df.columns:
+        df['Data_Aprovacao'] = ''
+    if 'Data_Liberacao' not in df.columns:
+        df['Data_Liberacao'] = ''
     if 'Arquivado' not in df.columns:
         df['Arquivado'] = 'Não'
         
@@ -244,7 +236,9 @@ def carregar_dados():
         'Mecanico_Responsavel': 'Não Atribuído',
         'Prioridade': 'Média',
         'Arquivado': 'Não',
-        'Status': 'Aguardando Aprovação'
+        'Status': 'Aguardando Aprovação',
+        'Data_Aprovacao': '',
+        'Data_Liberacao': ''
     })
 
     df = limpar_chamados_expirados(df)
@@ -395,7 +389,9 @@ else:
                             'Status': 'Aguardando Aprovação',
                             'Prioridade': 'Pendente',
                             'Aprovado_Coordenador': 'Não',
+                            'Data_Aprovacao': '',
                             'Mecanico_Responsavel': 'Não Atribuído',
+                            'Data_Liberacao': '',
                             'Arquivado': 'Não'
                         }
                         df_os = pd.concat([df_os, pd.DataFrame([nova_os])], ignore_index=True)
@@ -439,17 +435,34 @@ else:
             # Botão de Gerar Relatório (Permitido apenas para SuperAdmin >=4.0, Coordenador Plus 3.5 e Coordenador 3.0)
             if nivel_user >= 3.0:
                 st.markdown("---")
-                col_rel1, col_rel2 = st.columns([2, 2])
-                with col_rel1:
-                    # Converte o dataframe exibido atualmente (já filtrado por placa/status) para CSV para download
-                    csv_relatorio = df_exibicao.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Baixar Relatório de Manutenção (CSV)",
-                        data=csv_relatorio,
-                        file_name=f"relatorio_manutencao_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
+                
+                # Montando o relatório estruturado exatamente como solicitado
+                df_rel = df_os.copy()
+                if status_arq == "Sim":
+                    df_rel = df_rel[df_rel['Arquivado'] == 'Sim']
+                else:
+                    df_rel = df_rel[df_rel['Arquivado'] != 'Sim']
+
+                if busca_placa:
+                    df_rel = df_rel[df_rel['Placa'].astype(str).str.contains(busca_placa, na=False)]
+
+                # Seleção e renomeação de colunas específicas para o relatório
+                colunas_relatorio = ['ID_OS', 'Veiculo', 'Placa', 'Data', 'Data_Aprovacao', 'Prioridade', 'Mecanico_Responsavel', 'Data_Liberacao']
+                df_rel_final = df_rel[colunas_relatorio].copy()
+                df_rel_final.columns = [
+                    'Nº OS', 'Veículo/Equipamento', 'Identificação/Placa', 
+                    'Data do Registro do Chamado', 'Data de Aprovação', 
+                    'Prioridade', 'Mecânico Responsável', 'Data de Liberação'
+                ]
+
+                csv_relatorio = df_rel_final.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Baixar Relatório de Manutenção (CSV)",
+                    data=csv_relatorio,
+                    file_name=f"relatorio_manutencao_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
 
             if nivel_user >= 4.0:
                 st.markdown("---")
@@ -499,6 +512,7 @@ else:
                                 df_os.at[idx, 'Aprovado_Coordenador'] = 'Sim'
                                 df_os.at[idx, 'Prioridade'] = prioridade
                                 df_os.at[idx, 'Status'] = 'Aguardando Manutenção'
+                                df_os.at[idx, 'Data_Aprovacao'] = datetime.now().strftime('%d/%m/%Y %H:%M')
                                 salvar_dados(df_os)
                                 st.success(f"{row['ID_OS']} aprovada!")
                                 st.rerun()
@@ -519,18 +533,40 @@ else:
                     else:
                         for idx, row in df_sub.iterrows():
                             with st.expander(f"[{row['Prioridade']}] {row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
-                                st.write(f"**Solicitante:** {row['Motorista']} | **Data:** {row['Data']}")
+                                st.write(f"**Solicitante:** {row['Motorista']} | **Data do Registro:** {row['Data']}")
                                 st.write(f"**Problema:** {row['Descricao_Problema']}")
                                 
                                 novo_status = st.selectbox("Status", ["Aguardando Manutenção", "Em Andamento", "Concluído"], index=["Aguardando Manutenção", "Em Andamento", "Concluído"].index(row['Status']) if row['Status'] in ["Aguardando Manutenção", "Em Andamento", "Concluído"] else 0, key=f"st_{idx}")
-                                mecanico = st.text_input("Mecânico Responsável", value=row['Mecanico_Responsavel'], key=f"mec_{idx}")
+                                
+                                # Lógica para bloquear a edição do mecânico caso já tenha sido preenchido
+                                mec_atual = str(row['Mecanico_Responsavel']).strip()
+                                mec_bloqueado = mec_atual and mec_atual != 'Não Atribuído' and mec_atual != ''
+                                
+                                if mec_bloqueado:
+                                    st.text_input("Mecânico Responsável", value=mec_atual, disabled=True, key=f"mec_dis_{idx}")
+                                    mecanico = mec_atual
+                                    if nivel_user >= 4.0:
+                                        st.caption("🔒 Mecânico bloqueado após registro inicial.")
+                                else:
+                                    mecanico = st.text_input("Mecânico Responsável", value="" if mec_atual == 'Não Atribuído' else mec_atual, key=f"mec_{idx}")
                                 
                                 if st.button(f"Salvar Alterações", key=f"btn_m_{idx}", use_container_width=True):
-                                    df_os.at[idx, 'Status'] = novo_status
-                                    df_os.at[idx, 'Mecanico_Responsavel'] = mecanico
-                                    salvar_dados(df_os)
-                                    st.success("Atualizado!")
-                                    st.rerun()
+                                    if not mec_bloqueado and (not mecanico or mecanico.strip() == '' or mecanico == 'Não Atribuído'):
+                                        st.warning("Informe o nome do mecânico responsável antes de salvar.")
+                                    else:
+                                        df_os.at[idx, 'Status'] = novo_status
+                                        if not mec_bloqueado:
+                                            df_os.at[idx, 'Mecanico_Responsavel'] = mecanico.strip()
+                                        
+                                        # Se o status mudou para Concluído, preenche a data de liberação automaticamente se estiver vazia
+                                        if novo_status == 'Concluído' and not str(row['Data_Liberacao']).strip():
+                                            df_os.at[idx, 'Data_Liberacao'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+                                        elif novo_status != 'Concluído':
+                                            df_os.at[idx, 'Data_Liberacao'] = ''
+
+                                        salvar_dados(df_os)
+                                        st.success("Atualizado com sucesso!")
+                                        st.rerun()
 
                 with aba_pend:
                     renderizar_cards(aprovados[aprovados['Status'] == 'Aguardando Manutenção'], "Em Aberto")
