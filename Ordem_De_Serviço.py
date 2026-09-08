@@ -64,6 +64,7 @@ st.markdown(estilo_limpo, unsafe_allow_html=True)
 # ARQUIVOS DE BANCO DE DADOS
 ARQUIVO_CSV = 'chamados_manutencao.csv'
 ARQUIVO_USUARIOS = 'usuarios.csv'
+ARQUIVO_PAPEL_TIMBRADO = '8. Papel Timbrado.docx'
 
 VEICULOS = [
     "Caminhão Compactador", "Caminhão Poliguindaste", "Caminhão Roll-On",
@@ -213,27 +214,21 @@ def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False)
 
 def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
-    doc = Document()
-    
-    p_empresa = doc.add_paragraph()
-    p_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_emp = p_empresa.add_run("COPA ENGENHARIA AMBIENTAL E LOCAÇÃO DE EQUIPAMENTOS LTDA")
-    run_emp.bold = True
-    run_emp.font.size = Pt(12)
-    run_emp.font.color.rgb = RGBColor(0, 100, 0)
-    
-    p_cnpj = doc.add_paragraph()
-    p_cnpj.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_cnpj = p_cnpj.add_run("CNPJ: 08.545.322/0001-28")
-    run_cnpj.font.size = Pt(10)
-    
-    doc.add_paragraph().alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # Carrega o papel timbrado se existir, senão cria um documento em branco
+    if os.path.exists(ARQUIVO_PAPEL_TIMBRADO):
+        try:
+            doc = Document(ARQUIVO_PAPEL_TIMBRADO)
+        except Exception:
+            doc = Document()
+    else:
+        doc = Document()
     
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_tit = p_titulo.add_run("RELATÓRIO DE MANUTENÇÃO DO VEÍCULO")
     run_tit.bold = True
-    run_tit.font.size = Pt(16)
+    run_tit.font.size = Pt(14)
+    run_tit.font.color.rgb = RGBColor(0, 100, 0)
     
     if subtitulo_filtro:
         p_sub = doc.add_paragraph()
@@ -248,57 +243,36 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
     
     doc.add_paragraph()
 
-    tabela = doc.add_table(rows=1, cols=8)
-    tabela.alignment = WD_TABLE_ALIGNMENT.CENTER
-    tabela.style = 'Table Grid'
-    
-    hdr_cells = tabela.rows[0].cells
-    cabecalhos = [
-        'Nº OS', 'Veículo / Equipamento', 'Identificação / Placa', 
-        'Data Registro', 'Data Aprovação', 'Prioridade', 
-        'Mecânico Responsável', 'Data Liberação'
-    ]
-    
-    for i, nome_col in enumerate(cabecalhos):
-        hdr_cells[i].text = nome_col
-        for paragraph in hdr_cells[i].paragraphs:
-            for run in paragraph.runs:
-                run.bold = True
-                run.font.size = Pt(9)
-                
-    for _, row in df_rel.iterrows():
-        row_cells = tabela.add_row().cells
-        
-        def formatar_data_hora(val):
-            if not val or str(val).lower() == 'nan' or str(val).strip() == '':
-                return ''
-            val_str = str(val).strip()
+    def formatar_data_hora(val):
+        if not val or str(val).lower() == 'nan' or str(val).strip() == '':
+            return 'Não registrada'
+        val_str = str(val).strip()
+        try:
+            dt = datetime.strptime(val_str, '%d/%m/%Y %H:%M')
+            return dt.strftime('%d/%m/%Y %H:%M')
+        except ValueError:
             try:
-                dt = datetime.strptime(val_str, '%d/%m/%Y %H:%M')
+                dt = datetime.fromisoformat(val_str)
                 return dt.strftime('%d/%m/%Y %H:%M')
-            except ValueError:
-                try:
-                    dt = datetime.fromisoformat(val_str)
-                    return dt.strftime('%d/%m/%Y %H:%M')
-                except Exception:
-                    return val_str
+            except Exception:
+                return val_str
 
-        valores = [
-            str(row.get('ID_OS', '')),
-            str(row.get('Veiculo', '')),
-            str(row.get('Placa', '')),
-            formatar_data_hora(row.get('Data', '')),
-            formatar_data_hora(row.get('Data_Aprovacao', '')),
-            str(row.get('Prioridade', '')),
-            str(row.get('Mecanico_Responsavel', '')),
-            formatar_data_hora(row.get('Data_Liberacao', ''))
-        ]
+    # Adiciona cada chamado utilizando listas com marcadores (bullet points)
+    for _, row in df_rel.iterrows():
+        p_os_titulo = doc.add_paragraph(style='List Bullet')
+        run_os_num = p_os_titulo.add_run(f"Ordem de Serviço: {str(row.get('ID_OS', ''))}")
+        run_os_num.bold = True
         
-        for i, val in enumerate(valores):
-            row_cells[i].text = val if val != 'nan' else ''
-            for paragraph in row_cells[i].paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(8.5)
+        doc.add_paragraph(f"• Veículo / Equipamento: {str(row.get('Veiculo', ''))}", style='List Bullet 2') if 'List Bullet 2' in [s.name for s in doc.styles] else doc.add_paragraph(f"    - Veículo / Equipamento: {str(row.get('Veiculo', ''))}")
+        doc.add_paragraph(f"• Identificação / Placa: {str(row.get('Placa', ''))}", style='List Bullet 2') if 'List Bullet 2' in [s.name for s in doc.styles] else doc.add_paragraph(f"    - Identificação / Placa: {str(row.get('Placa', ''))}")
+        doc.add_paragraph(f"• Data do Registro: {formatar_data_hora(row.get('Data', ''))}")
+        doc.add_paragraph(f"• Data de Aprovação: {formatar_data_hora(row.get('Data_Aprovacao', ''))}")
+        doc.add_paragraph(f"• Prioridade: {str(row.get('Prioridade', ''))}")
+        doc.add_paragraph(f"• Mecânico Responsável: {str(row.get('Mecanico_Responsavel', ''))}")
+        doc.add_paragraph(f"• Data de Liberação: {formatar_data_hora(row.get('Data_Liberacao', ''))}")
+        doc.add_paragraph(f"• Descrição do Problema: {str(row.get('Descricao_Problema', ''))}")
+        
+        doc.add_paragraph() # Espaçador entre os chamados
 
     f = io.BytesIO()
     doc.save(f)
@@ -485,7 +459,7 @@ else:
             if nivel_user >= 3.0:
                 st.markdown("")
                 with st.container(border=True):
-                    st.subheader("📥 Baixar Relatório Individual")
+                    st.subheader("📥 Baixar Relatório Individual (Papel Timbrado)")
                     
                     df_rel_base = df_os.copy()
                     if status_arq == "Sim":
@@ -652,7 +626,6 @@ else:
                 with aba_and:
                     renderizar_cards(aprovados[aprovados['Status'] == 'Em Andamento'], "Em Andamento")
                 with aba_conc:
-                    # Filtra apenas concluídos recentes (últimos 2 dias) para não acumular na tela principal
                     def eh_recente(data_str):
                         try:
                             dt = datetime.strptime(str(data_str).strip(), '%d/%m/%Y %H:%M')
