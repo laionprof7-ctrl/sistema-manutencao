@@ -130,7 +130,6 @@ def atualizar_nome_usuario(user_alvo, novo_nome, nivel_editor):
     if user_alvo in df['usuario'].values:
         nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
         
-        # Coordenador Plus (3.5) não pode alterar nome de SuperAdmin (4.0)
         if float(nivel_editor) < 4.0 and nivel_alvo >= 4.0:
             return False, "Você não tem permissão para alterar o nome de um Administrador Global!"
 
@@ -437,6 +436,21 @@ else:
 
             st.dataframe(df_exibicao, use_container_width=True)
 
+            # Botão de Gerar Relatório (Permitido apenas para SuperAdmin >=4.0, Coordenador Plus 3.5 e Coordenador 3.0)
+            if nivel_user >= 3.0:
+                st.markdown("---")
+                col_rel1, col_rel2 = st.columns([2, 2])
+                with col_rel1:
+                    # Converte o dataframe exibido atualmente (já filtrado por placa/status) para CSV para download
+                    csv_relatorio = df_exibicao.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Baixar Relatório de Manutenção (CSV)",
+                        data=csv_relatorio,
+                        file_name=f"relatorio_manutencao_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+
             if nivel_user >= 4.0:
                 st.markdown("---")
                 st.subheader("⚙️ Gestão de OS (Administrador Global)")
@@ -568,7 +582,6 @@ else:
                     if df_u.empty:
                         st.info("Nenhum usuário cadastrado.")
                     else:
-                        # Monta uma lista amigável limpando termos extras e exibindo: "Nome (usuario)"
                         opcoes_select = []
                         mapa_usuarios = {}
                         for _, r in df_u.iterrows():
