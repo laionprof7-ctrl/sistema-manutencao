@@ -9,9 +9,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# Configuração da Página (Correção do parâmetro layout)
+# Configuração da Página
 st.set_page_config(
-    page_title="Sistema Integrado de Gestão de Manutenção de Frota",
+    page_title="Copa Ambiental — Gestão de Manutenção",
+    page_icon="🛠️",
     layout="wide"
 )
 
@@ -67,7 +68,8 @@ def gerar_pdf_os(os_data):
     estilo_label = ParagraphStyle('Label', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#4b5563'), fontName='Helvetica-Bold')
     estilo_valor = ParagraphStyle('Valor', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#111827'))
 
-    elementos.append(Paragraph(f"<b>ORDEM DE SERVIÇO — {os_data.get('ID', 'N/A')}</b>", estilo_titulo))
+    elementos.append(Paragraph(f"<b>COPA AMBIENTAL — FICHA DE ORDEM DE SERVIÇO</b>", estilo_titulo))
+    elementos.append(Paragraph(f"<b>ID do Chamado:</b> {os_data.get('ID', 'N/A')}", styles['Normal']))
     elementos.append(Spacer(1, 10))
 
     dados_tabela = [
@@ -77,6 +79,7 @@ def gerar_pdf_os(os_data):
         [Paragraph("Solicitante:", estilo_label), Paragraph(str(os_data.get('Motorista', '')), estilo_valor)],
         [Paragraph("Relato do Problema:", estilo_label), Paragraph(str(os_data.get('Descricao_Defeito', '')), estilo_valor)],
         [Paragraph("Mecânico Responsável:", estilo_label), Paragraph(str(os_data.get('Mecanico_Responsavel', 'Não atribuído')), estilo_valor)],
+        [Paragraph("Prioridade:", estilo_label), Paragraph(str(os_data.get('Prioridade', '')), estilo_valor)],
         [Paragraph("Status Atual:", estilo_label), Paragraph(str(os_data.get('Status', '')), estilo_valor)],
         [Paragraph("Data de Liberação:", estilo_label), Paragraph(str(os_data.get('Data_Liberacao', 'Pendente / Em andamento')), estilo_valor)]
     ]
@@ -105,38 +108,43 @@ if 'logged_in' not in st.session_state:
 
 # Tela de Login
 if not st.session_state.logged_in:
-    st.title("Copa Ambiental — Gestão de Manutenção")
-    st.subheader("Autenticação de Usuário")
-    
-    usuario_input = st.text_input("Usuário")
-    senha_input = st.text_input("Senha", type="password")
-    
-    if st.button("Entrar"):
-        df_u = pd.read_csv(ARQ_USUARIOS)
-        hash_senha = gerar_hash(senha_input)
-        user_match = df_u[(df_u['usuario'] == usuario_input) & (df_u['senha'] == hash_senha)]
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("## 🌿 Copa Ambiental")
+        st.markdown("### Sistema Integrado de Gestão de Manutenção de Frota")
+        st.markdown("---")
         
-        if not user_match.empty:
-            st.session_state.logged_in = True
-            st.session_state.user_info = {
-                "usuario": user_match.iloc[0]['usuario'],
-                "nivel": float(user_match.iloc[0]['nivel'])
-            }
-            st.rerun()
-        else:
-            st.error("Usuário ou senha incorretos.")
+        usuario_input = st.text_input("Usuário")
+        senha_input = st.text_input("Senha", type="password")
+        
+        if st.button("Entrar no Sistema", use_container_width=True):
+            df_u = pd.read_csv(ARQ_USUARIOS)
+            hash_senha = gerar_hash(senha_input)
+            user_match = df_u[(df_u['usuario'] == usuario_input) & (df_u['senha'] == hash_senha)]
+            
+            if not user_match.empty:
+                st.session_state.logged_in = True
+                st.session_state.user_info = {
+                    "usuario": user_match.iloc[0]['usuario'],
+                    "nivel": float(user_match.iloc[0]['nivel'])
+                }
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos.")
 else:
     # Sistema Principal (Pós-Login)
     user = st.session_state.user_info
-    st.sidebar.title(f"Painel: {user['usuario']}")
+    st.sidebar.markdown("### 🌿 Copa Ambiental")
+    st.sidebar.markdown(f"**Usuário:** {user['usuario']}")
     st.sidebar.markdown(f"**Nível de Acesso:** {user['nivel']}")
+    st.sidebar.markdown("---")
     
-    if st.sidebar.button("Sair do Sistema"):
+    if st.sidebar.button("Sair do Sistema", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.user_info = None
         st.rerun()
 
-    st.title("Sistema Integrado de Gestão de Manutenção de Frota")
+    st.title("🛠️ Sistema Integrado de Gestão de Manutenção de Frota")
     
     df_chamados = pd.read_csv(ARQ_CHAMADOS)
 
@@ -144,11 +152,11 @@ else:
     aba_opcao = st.sidebar.radio("Navegação", ["Consultar / Ficha OS", "Abertura de Chamado", "Painel da Oficina (Mecânico)", "Coordenação / Triagem", "Gestão de Usuários"])
 
     if aba_opcao == "Consultar / Ficha OS":
-        st.header("Consulta de Ordens de Serviço e Emissão de Ficha")
+        st.header("📋 Consulta de Ordens de Serviço e Emissão de Ficha")
         if df_chamados.empty:
             st.info("Nenhuma OS registrada no momento.")
         else:
-            pesquisa = st.text_input("Filtrar por Placa ou ID da OS")
+            pesquisa = st.text_input("🔍 Filtrar por Placa ou ID da OS")
             df_exibicao = df_chamados.copy()
             if pesquisa:
                 df_exibicao = df_exibicao[df_exibicao['Placa'].str.contains(pesquisa, case=False, na=False) | df_exibicao['ID'].str.contains(pesquisa, case=False, na=False)]
@@ -156,24 +164,30 @@ else:
             st.dataframe(df_exibicao, use_container_width=True)
             
             st.markdown("---")
-            st.subheader("Gerar Relatório Individual (PDF)")
+            st.subheader("📄 Relatório Opcional Individual (PDF)")
             os_ids = df_chamados['ID'].tolist() if not df_chamados.empty else []
             if os_ids:
-                os_escolhida = st.selectbox("Selecione o ID da OS para emitir a ficha:", os_ids)
-                os_dados_linha = df_chamados[df_chamados['ID'] == os_escolhida].iloc[0].to_dict()
+                col_sel1, col_sel2 = st.columns([2, 1])
+                with col_sel1:
+                    os_escolhida = st.selectbox("Selecione o ID da OS para emitir a ficha:", os_ids)
                 
-                if st.button("📄 Gerar PDF da Ficha de OS"):
+                if os_escolhida:
+                    os_dados_linha = df_chamados[df_chamados['ID'] == os_escolhida].iloc[0].to_dict()
                     pdf_bytes = gerar_pdf_os(os_dados_linha)
-                    st.download_button(
-                        label="📥 Clique para baixar o PDF",
-                        data=pdf_bytes,
-                        file_name=f"Ficha_{os_escolhida}.pdf",
-                        mime="application/pdf"
-                    )
+                    
+                    with col_sel2:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.download_button(
+                            label="📥 Baixar Ficha em PDF",
+                            data=pdf_bytes,
+                            file_name=f"Ficha_{os_escolhida}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
 
     elif aba_opcao == "Abertura de Chamado":
         if user['nivel'] >= 1.0:
-            st.header("Abertura de Nova Ordem de Serviço")
+            st.header("📝 Abertura de Nova Ordem de Serviço")
             with st.form("form_abertura"):
                 veiculo = st.text_input("Modelo do Veículo")
                 placa = st.text_input("Placa do Veículo")
@@ -205,7 +219,7 @@ else:
 
     elif aba_opcao == "Painel da Oficina (Mecânico)":
         if user['nivel'] >= 2.0:
-            st.header("Painel da Oficina")
+            st.header("🔧 Painel da Oficina")
             aprovados = df_chamados[df_chamados['Status'].isin(['Aguardando Manutenção', 'Em Andamento'])]
             if aprovados.empty:
                 st.info("Nenhuma OS disponível para atendimento na oficina.")
@@ -231,7 +245,7 @@ else:
 
     elif aba_opcao == "Coordenação / Triagem":
         if user['nivel'] >= 3.0:
-            st.header("Triagem e Aprovação de Chamados")
+            st.header("📊 Triagem e Aprovação de Chamados")
             pendentes = df_chamados[df_chamados['Status'] == 'Aguardando Aprovação']
             if pendentes.empty:
                 st.info("Nenhum chamado aguardando aprovação.")
@@ -258,7 +272,7 @@ else:
 
     elif aba_opcao == "Gestão de Usuários":
         if user['nivel'] >= 4.0:
-            st.header("Gestão de Contas e Credenciais")
+            st.header("🔑 Gestão de Contas e Credenciais")
             df_u = pd.read_csv(ARQ_USUARIOS)
             st.dataframe(df_u, use_container_width=True)
             
