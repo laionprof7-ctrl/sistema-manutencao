@@ -5,7 +5,7 @@ import hashlib
 from datetime import datetime, timedelta
 from PIL import Image
 
-# CARREGAMENTO SEGURO DA LOGO
+# CARREGAMENTO DA LOGO
 logo_img = None
 if os.path.exists("logo.png"):
     try:
@@ -35,4 +35,524 @@ st.markdown(esconder_menu, unsafe_allow_html=True)
 ARQUIVO_CSV = 'chamados_manutencao.csv'
 ARQUIVO_USUARIOS = 'usuarios.csv'
 
-# ... (restante das funções do seu código permanece igual)
+# LISTA DE VEÍCULOS
+VEICULOS = [
+    "Caminhão Compactador", "Caminhão Poliguindaste", "Caminhão Roll-On",
+    "Caminhão Pipa", "Caminhão Basculante", "Carregadeira",
+    "Retroescavadeira", "Trator de Esteira", "Motoniveladora",
+    "Pick-up Operacional", "Van de Equipe", "Veículo Leve / Apoio"
+]
+
+# FUNÇÕES AUXILIARES PARA CRIPTOGRAFIA E USUÁRIOS
+def hash_senha(senha):
+    return hashlib.sha256(str.encode(senha)).hexdigest()
+
+def carregar_usuarios():
+    if not os.path.exists(ARQUIVO_USUARIOS):
+        df = pd.DataFrame([{
+            'usuario': 'laion',
+            'senha': hash_senha('@Laion2004lima'),
+            'nome': 'Laion (SuperAdmin)',
+            'nivel': 4.0
+        }])
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return df
+    
+    df = pd.read_csv(ARQUIVO_USUARIOS)
+    df['nivel'] = df['nivel'].astype(float)
+    
+    if 'laion' not in df['usuario'].values:
+        novo_laion = pd.DataFrame([{
+            'usuario': 'laion',
+            'senha': hash_senha('@Laion2004lima'),
+            'nome': 'Laion (SuperAdmin)',
+            'nivel': 4.0
+        }])
+        df = pd.concat([df, novo_laion], ignore_index=True)
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        
+    return df
+
+def salvar_usuario(novo_user, nova_senha, nome, nivel, nivel_criador):
+    if float(nivel) >= 3.5 and float(nivel_criador) < 4.0:
+        return False, "Apenas o SuperAdmin (Nível 4) pode criar usuários Nível 3+ ou Nível 4!"
+        
+    df = carregar_usuarios()
+    if novo_user in df['usuario'].values:
+        return False, "Usuário já existe!"
+    
+    novo_df = pd.DataFrame([{
+        'usuario': novo_user,
+        'senha': hash_senha(nova_senha),
+        'nome': nome,
+        'nivel': float(nivel)
+    }])
+    df = pd.concat([df, novo_df], ignore_index=True)
+    df.to_csv(ARQUIVO_USUARIOS, index=False)
+    return True, "Usuário cadastrado com sucesso!"
+
+def atualizar_nivel_usuario(user_alvo, novo_nivel, nivel_editor, user_logado):
+    if user_alvo == user_logado:
+        return False, "Você não pode alterar o seu próprio nível de acesso!"
+
+    df = carregar_usuarios()
+    if user_alvo in df['usuario'].values:
+        if user_alvo == 'laion':
+            return False, "O usuário principal 'laion' tem seu nível protegido!"
+            
+        nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
+        if float(nivel_editor) < 4.0:
+            if nivel_alvo >= 3.5:
+                return False, "Você não tem permissão para alterar o nível deste usuário!"
+            if float(novo_nivel) >= 3.5:
+                return False, "Apenas o SuperAdmin (Nível 4) pode promover usuários para Nível 3+ ou Nível 4!"
+            
+        df.loc[df['usuario'] == user_alvo, 'nivel'] = float(novo_nivel)
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return True, f"Nível do usuário '{user_alvo}' atualizado com sucesso!"
+    return False, "Usuário não encontrado!"
+
+def redefinir_senha_usuario(user_alvo, nova_senha, nivel_editor, user_logado):
+    df = carregar_usuarios()
+    if user_alvo in df['usuario'].values:
+        nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
+        if float(nivel_editor) < 4.0 and nivel_alvo >= float(nivel_editor):
+            return False, "Você não tem permissão para alterar a senha deste usuário!"
+
+        df.loc[df['usuario'] == user_alvo, 'senha'] = hash_senha(nova_senha)
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return True, f"Senha do usuário '{user_alvo}' alterada com sucesso!"
+    return False, "Usuário não encontrado!"
+
+def excluir_usuario(user_alvo, user_logado, nivel_editor):
+    if user_alvo == user_logado:
+        return False, "Você não pode excluir a sua própria conta enquanto estiver logado!"
+
+    if user_alvo in ['laion', 'admin']:
+        return False, f"O usuário principal '{user_alvo}' está protegido!"
+    
+    df = carregar_usuarios()
+    if user_alvo in df['usuario'].values:
+        nivel_alvo = float(df.loc[df['usuario'] == user_alvo, 'nivel'].values[0])
+        
+        if nivel_alvo == 4.0:
+            return False, "Usuários de Nível 4 são totalmente protegidos contra exclusão!"
+            
+        if float(nivel_editor) < 4.0:
+            if float(nivel_editor) == 3.5 and nivel_alvo >= 3.5:
+                return False, "Usuários Nível 3+ só podem excluir usuários inferiores!"
+            elif float(nivel_editor) == 3.0:
+                return False, "Apenas usuários de Nível 3+ ou Nível 4 podem excluir contas!"
+            
+        df = df[df['usuario'] != user_alvo]
+        df.to_csv(ARQUIVO_USUARIOS, index=False)
+        return True, f"Usuário '{user_alvo}' excluído com sucesso!"
+    return False, "Usuário não encontrado!"
+
+def limpar_chamados_expirados(df):
+    if df.empty or 'Data' not in df.columns:
+        return df
+
+    agora = datetime.now()
+    indices_para_remover = []
+
+    for idx, row in df.iterrows():
+        aprovado = str(row.get('Aprovado_Coordenador', 'Não')).strip()
+        if aprovado == 'Não':
+            try:
+                data_chamado = datetime.strptime(str(row['Data']), '%d/%m/%Y %H:%M')
+                if agora - data_chamado > timedelta(days=7):
+                    indices_para_remover.append(idx)
+            except Exception:
+                pass
+
+    if indices_para_remover:
+        df = df.drop(index=indices_para_remover).reset_index(drop=True)
+        salvar_dados(df)
+
+    return df
+
+def carregar_dados():
+    colunas_obrigatorias = [
+        'ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 
+        'Descricao_Problema', 'Status', 'Prioridade', 'Aprovado_Coordenador', 'Mecanico_Responsavel', 'Arquivado'
+    ]
+    
+    if not os.path.exists(ARQUIVO_CSV):
+        df = pd.DataFrame(columns=colunas_obrigatorias)
+        df.to_csv(ARQUIVO_CSV, index=False)
+        return df
+    
+    df = pd.read_csv(ARQUIVO_CSV)
+    
+    mapeamento = {
+        'Protocolo': 'ID_OS',
+        'Data/Hora': 'Data',
+        'Modelo': 'Veiculo',
+        'Anamalia_Texto': 'Descricao_Problema'
+    }
+    
+    for antiga, nova in mapeamento.items():
+        if antiga in df.columns:
+            if nova not in df.columns or df[nova].isnull().all():
+                df[nova] = df[antiga]
+            df.drop(columns=[antiga], inplace=True)
+
+    if 'Aprovado_Coordenador' not in df.columns:
+        df['Aprovado_Coordenador'] = 'Sim'
+    if 'Prioridade' not in df.columns:
+        df['Prioridade'] = 'Média'
+    if 'Mecanico_Responsavel' not in df.columns:
+        df['Mecanico_Responsavel'] = 'Não Atribuído'
+    if 'Motorista' not in df.columns:
+        df['Motorista'] = 'Não Identificado'
+    if 'Arquivado' not in df.columns:
+        df['Arquivado'] = 'Não'
+        
+    for col in colunas_obrigatorias:
+        if col not in df.columns:
+            df[col] = ''
+            
+    df = df.fillna({
+        'Motorista': 'Não Identificado',
+        'Descricao_Problema': 'Sem descrição',
+        'Mecanico_Responsavel': 'Não Atribuído',
+        'Prioridade': 'Média',
+        'Arquivado': 'Não',
+        'Status': 'Aguardando Aprovação'
+    })
+
+    df = limpar_chamados_expirados(df)
+    salvar_dados(df)
+
+    return df
+
+def salvar_dados(df):
+    df.to_csv(ARQUIVO_CSV, index=False)
+
+# GERENCIAMENTO DE SESSÃO / LOGIN
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+    st.session_state['user_info'] = None
+
+if not st.session_state['logged_in']:
+    if logo_img:
+        st.image(logo_img, width=300)
+    
+    st.title("Gestão de Manutenção | Login do Sistema")
+    
+    with st.form("form_login"):
+        user_input = st.text_input("Usuário").strip().lower()
+        password_input = st.text_input("Senha", type="password")
+        btn_login = st.form_submit_button("Entrar")
+        
+        if btn_login:
+            df_users = carregar_usuarios()
+            senha_enc = hash_senha(password_input)
+            user_match = df_users[(df_users['usuario'] == user_input) & (df_users['senha'] == senha_enc)]
+            
+            if not user_match.empty:
+                st.session_state['logged_in'] = True
+                st.session_state['user_info'] = user_match.iloc[0].to_dict()
+                st.success(f"Bem-vindo, {st.session_state['user_info']['nome']}!")
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos.")
+else:
+    if logo_img:
+        st.sidebar.image(logo_img, use_container_width=True)
+    
+    user_data = st.session_state['user_info']
+    nivel_user = float(user_data['nivel'])
+    usuario_atual = str(user_data['usuario'])
+    
+    st.sidebar.write(f"👤 **{user_data['nome']}**")
+    lbl_nivel = "3+" if nivel_user == 3.5 else str(int(nivel_user))
+    st.sidebar.caption(f"Nível de Acesso: {lbl_nivel}")
+    
+    if st.sidebar.button("Sair / Logout"):
+        st.session_state['logged_in'] = False
+        st.session_state['user_info'] = None
+        st.rerun()
+
+    abas_disponiveis = ["📝 Abrir Chamado", "🔍 Consultar Chamados"]
+    
+    if nivel_user >= 2.0:
+        abas_disponiveis.append("🎯 Triagem & Prioridade (Coordenador)")
+        abas_disponiveis.append("🛠️ Painel do Mecânico")
+        
+    if nivel_user >= 3.0:
+        abas_disponiveis.append("👤 Gestão de Usuários")
+
+    aba_selecionada = st.sidebar.radio("Navegação", abas_disponiveis)
+
+    df_os = carregar_dados()
+
+    # ABA 1: ABRIR CHAMADO
+    if aba_selecionada == "📝 Abrir Chamado":
+        st.header("Abertura de Ordem de Serviço")
+        
+        col_veic, col_chk = st.columns([3, 1])
+        with col_veic:
+            veiculo_sel = st.selectbox("Selecione o Veículo/Equipamento", VEICULOS)
+        with col_chk:
+            st.write("")
+            st.write("")
+            outro_marcado = st.checkbox("Outros")
+
+        outros_veiculo = ""
+        if outro_marcado:
+            outros_veiculo = st.text_input("Digite o nome do veículo/equipamento")
+
+        with st.form("form_chamado", clear_on_submit=True):
+            placa = st.text_input("Placa / Identificação").upper()
+            descricao = st.text_area("Descrição do Defeito / Problema")
+            btn_submeter = st.form_submit_button("Enviar Chamado")
+
+            if btn_submeter:
+                veiculo_final = outros_veiculo if outro_marcado else veiculo_sel
+                
+                if outro_marcado and not outros_veiculo.strip():
+                    st.warning("Por favor, especifique o nome do veículo/equipamento no campo indicado.")
+                elif placa and descricao:
+                    novo_id = f"OS-{len(df_os) + 1001}"
+                    nova_os = {
+                        'ID_OS': novo_id,
+                        'Data': pd.Timestamp.now().strftime('%d/%m/%Y %H:%M'),
+                        'Motorista': user_data['nome'],
+                        'Veiculo': veiculo_final,
+                        'Placa': placa,
+                        'Descricao_Problema': descricao,
+                        'Status': 'Aguardando Aprovação',
+                        'Prioridade': 'Pendente',
+                        'Aprovado_Coordenador': 'Não',
+                        'Mecanico_Responsavel': 'Não Atribuído',
+                        'Arquivado': 'Não'
+                    }
+                    df_os = pd.concat([df_os, pd.DataFrame([nova_os])], ignore_index=True)
+                    salvar_dados(df_os)
+                    st.success(f"Chamado {novo_id} registrado com sucesso!")
+                else:
+                    st.warning("Preencha a placa e a descrição do problema.")
+
+    # ABA 2: CONSULTAR CHAMADOS
+    elif aba_selecionada == "🔍 Consultar Chamados":
+        st.header("Consulta de Ordens de Serviço")
+        
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            busca_placa = st.text_input("Filtrar por Placa").upper()
+        with c2:
+            ver_arquivados = st.selectbox("Status de Exibição", ["Chamados Ativos", "Chamados Arquivados"])
+        
+        df_exibicao = df_os.copy()
+        
+        status_arq = "Sim" if ver_arquivados == "Chamados Arquivados" else "Não"
+        df_exibicao = df_exibicao[df_exibicao['Arquivado'] == status_arq]
+        
+        if nivel_user == 1.0:
+            colunas_nivel_1 = ['ID_OS', 'Data', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status']
+            df_exibicao = df_exibicao[colunas_nivel_1]
+            df_exibicao.columns = ['Nº da OS', 'Data de Registro', 'Veículo / Equipamento', 'Placa', 'Descrição do Problema', 'Status']
+        else:
+            colunas_gestao = ['ID_OS', 'Data', 'Motorista', 'Veiculo', 'Placa', 'Descricao_Problema', 'Status', 'Prioridade', 'Mecanico_Responsavel']
+            df_exibicao = df_exibicao[colunas_gestao]
+            df_exibicao.columns = ['Nº da OS', 'Data de Registro', 'Aberto por (Solicitante)', 'Veículo / Equipamento', 'Placa', 'Descrição do Problema', 'Status', 'Prioridade', 'Mecânico']
+
+        if busca_placa:
+            df_exibicao = df_exibicao[df_exibicao['Placa'].astype(str).str.contains(busca_placa, na=False)]
+
+        st.dataframe(df_exibicao, use_container_width=True)
+
+        if nivel_user == 4.0:
+            st.markdown("---")
+            st.subheader("⚙️ Gestão Avançada de OS (Exclusivo SuperAdmin - Nível 4)")
+            
+            lista_os = df_os['ID_OS'].tolist()
+            if lista_os:
+                os_selecionada = st.selectbox("Selecione uma Ordem de Serviço para Gerenciar", lista_os)
+                dados_os_sel = df_os[df_os['ID_OS'] == os_selecionada].iloc[0]
+                idx_os = df_os[df_os['ID_OS'] == os_selecionada].index[0]
+
+                st.write(f"**OS:** {dados_os_sel['ID_OS']} | **Solicitante:** {dados_os_sel['Motorista']} | **Veículo:** {dados_os_sel['Veiculo']} ({dados_os_sel['Placa']})")
+                
+                col_arq, col_del = st.columns(2)
+                
+                with col_arq:
+                    status_atual_arq = dados_os_sel.get('Arquivado', 'Não')
+                    lbl_btn = "Desarquivar Chamado" if status_atual_arq == "Sim" else "Arquivar Chamado"
+                    if st.button(lbl_btn):
+                        novo_st = "Não" if status_atual_arq == "Sim" else "Sim"
+                        df_os.at[idx_os, 'Arquivado'] = novo_st
+                        salvar_dados(df_os)
+                        st.success(f"Status de arquivamento da OS {os_selecionada} atualizado!")
+                        st.rerun()
+
+                with col_del:
+                    if st.button("🗑️ Apagar Chamado Definitivamente", type="primary"):
+                        df_os = df_os.drop(index=idx_os).reset_index(drop=True)
+                        salvar_dados(df_os)
+                        st.success(f"OS {os_selecionada} foi excluída permanentemente!")
+                        st.rerun()
+
+    # ABA 3: TRIAGEM & PRIORIDADE
+    elif aba_selecionada == "🎯 Triagem & Prioridade (Coordenador)":
+        st.header("Aprovação e Definição de Prioridades")
+        pendentes = df_os[(df_os['Aprovado_Coordenador'] == 'Não') & (df_os['Arquivado'] != 'Sim')]
+
+        if pendentes.empty:
+            st.info("Não há chamados aguardando aprovação.")
+        else:
+            for idx, row in pendentes.iterrows():
+                with st.expander(f"{row['ID_OS']} - {row['Veiculo']} ({row['Placa']}) - Solicitante: {row['Motorista']}"):
+                    st.write(f"**Aberto por:** {row['Motorista']}")
+                    st.write(f"**Data da Abertura:** {row['Data']}")
+                    st.write(f"**Problema:** {row['Descricao_Problema']}")
+                    
+                    prioridade = st.selectbox(f"Defina a Prioridade ({row['ID_OS']})", ["Alta", "Média", "Baixa"], key=f"prio_{idx}")
+                    if st.button(f"Aprovar e Enviar para Oficina ({row['ID_OS']})", key=f"btn_aprov_{idx}"):
+                        df_os.at[idx, 'Aprovado_Coordenador'] = 'Sim'
+                        df_os.at[idx, 'Prioridade'] = prioridade
+                        df_os.at[idx, 'Status'] = 'Aguardando Manutenção'
+                        salvar_dados(df_os)
+                        st.success(f"{row['ID_OS']} aprovada com sucesso!")
+                        st.rerun()
+
+    # ABA 4: PAINEL DO MECÂNICO
+    elif aba_selecionada == "🛠️ Painel do Mecânico":
+        st.header("Atendimento de Oficina")
+        
+        aprovados = df_os[(df_os['Aprovado_Coordenador'] == 'Sim') & (df_os['Arquivado'] != 'Sim')]
+        
+        aba_pend, aba_and, aba_conc = st.tabs(["⏳ Pendentes (Em Aberto)", "🔄 Em Andamento", "✅ Concluídos"])
+        
+        def renderizar_cards(df_sub, aba_nome):
+            if df_sub.empty:
+                st.info(f"Nenhum chamado na categoria '{aba_nome}'.")
+            else:
+                for idx, row in df_sub.iterrows():
+                    with st.expander(f"[{row['Prioridade']}] {row['ID_OS']} - {row['Veiculo']} ({row['Placa']})"):
+                        st.write(f"📌 **Nº da OS:** {row['ID_OS']}")
+                        st.write(f"📅 **Data e Horário de Abertura:** {row['Data']}")
+                        st.write(f"👤 **Aberto por (Solicitante):** {row['Motorista']}")
+                        st.write(f"🚛 **Veículo / Identificação:** {row['Veiculo']} | Placa: {row['Placa']}")
+                        st.write(f"🚨 **Prioridade (Definida pela Coordenação):** {row['Prioridade']}")
+                        st.write(f"📝 **Problema / Defeito:** {row['Descricao_Problema']}")
+                        st.write(f"📊 **Status Atual:** {row['Status']}")
+                        
+                        st.markdown("---")
+                        novo_status = st.selectbox(f"Atualizar Status", ["Aguardando Manutenção", "Em Andamento", "Concluído"], index=["Aguardando Manutenção", "Em Andamento", "Concluído"].index(row['Status']) if row['Status'] in ["Aguardando Manutenção", "Em Andamento", "Concluído"] else 0, key=f"st_{idx}")
+                        mecanico = st.text_input("Mecânico Responsável", value=row['Mecanico_Responsavel'], key=f"mec_{idx}")
+                        
+                        if st.button(f"Atualizar OS {row['ID_OS']}", key=f"btn_m_{idx}"):
+                            df_os.at[idx, 'Status'] = novo_status
+                            df_os.at[idx, 'Mecanico_Responsavel'] = mecanico
+                            salvar_dados(df_os)
+                            st.success(f"OS {row['ID_OS']} atualizada!")
+                            st.rerun()
+
+        with aba_pend:
+            df_p = aprovados[aprovados['Status'] == 'Aguardando Manutenção']
+            renderizar_cards(df_p, "Pendentes")
+
+        with aba_and:
+            df_a = aprovados[aprovados['Status'] == 'Em Andamento']
+            renderizar_cards(df_a, "Em Andamento")
+
+        with aba_conc:
+            df_c = aprovados[aprovados['Status'] == 'Concluído']
+            renderizar_cards(df_c, "Concluídos")
+
+    # ABA 5: GESTÃO DE USUÁRIOS
+    elif aba_selecionada == "👤 Gestão de Usuários":
+        st.header("Gerenciamento de Usuários")
+        
+        col1, col2 = st.columns(2)
+        
+        opcoes_nivel = [
+            "1 - Motorista (Abrir/Consultar)",
+            "2 - Administrador / Operacional (Apenas Chamados)",
+            "3 - Coordenador (Gestão + Chamados)"
+        ]
+        
+        if nivel_user == 4.0:
+            opcoes_nivel.append("3.5 - Coordenador Plus (Gestão Completa de Usuários Inferiores)")
+            opcoes_nivel.append("4 - SuperAdmin / Direção (Acesso Total - Protegido)")
+        
+        with col1:
+            st.subheader("➕ Cadastrar Novo Usuário")
+            with st.form("form_novo_user", clear_on_submit=True):
+                nome_user = st.text_input("Nome Completo do Colaborador")
+                username = st.text_input("Nome de Usuário (Login)").lower()
+                senha_user = st.text_input("Senha Inicial", type="password")
+                nivel_acesso = st.selectbox("Nível de Acesso", opcoes_nivel)
+                btn_cadastrar = st.form_submit_button("Criar Usuário")
+
+                if btn_cadastrar:
+                    if username and senha_user and nome_user:
+                        num_nivel = float(nivel_acesso.split(" - ")[0])
+                        sucesso, msg = salvar_usuario(username, senha_user, nome_user, num_nivel, nivel_user)
+                        if sucesso:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                    else:
+                        st.warning("Preencha todos os campos do formulário.")
+
+        with col2:
+            st.subheader("⚙️ Alterar Permissões / Senha / Excluir")
+            df_u = carregar_usuarios()
+            lista_usuarios = df_u['usuario'].tolist()
+            
+            user_selecionado = st.selectbox("Selecione o Usuário", lista_usuarios)
+            
+            if user_selecionado:
+                dados_u = df_u[df_u['usuario'] == user_selecionado].iloc[0]
+                niv_u_val = float(dados_u['nivel'])
+                niv_str = "3+" if niv_u_val == 3.5 else str(int(niv_u_val)) if niv_u_val.is_integer() else str(niv_u_val)
+                
+                st.write(f"**Nome:** {dados_u['nome']}")
+                st.write(f"**Nível Atual:** {niv_str}")
+                
+                with st.expander("✏️ Alterar Nível de Acesso"):
+                    novo_niv = st.selectbox("Novo Nível", opcoes_nivel, key="sel_novo_niv")
+                    if st.button("Salvar Novo Nível"):
+                        num_n = float(novo_niv.split(" - ")[0])
+                        sucesso, msg = atualizar_nivel_usuario(user_selecionado, num_n, nivel_user, usuario_atual)
+                        if sucesso:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+                with st.expander("🔑 Redefinir Senha do Usuário"):
+                    nova_senha = st.text_input("Nova Senha", type="password", key=f"pwd_{user_selecionado}")
+                    if st.button("Atualizar Senha"):
+                        if nova_senha:
+                            sucesso, msg = redefinir_senha_usuario(user_selecionado, nova_senha, nivel_user, usuario_atual)
+                            if sucesso:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                        else:
+                            st.warning("Digite uma nova senha.")
+
+                with st.expander("🗑️ Excluir Usuário"):
+                    st.warning(f"Tem certeza que deseja excluir o usuário '{user_selecionado}'?")
+                    if st.button("Confirmar Exclusão", type="primary"):
+                        sucesso, msg = excluir_usuario(user_selecionado, usuario_atual, nivel_user)
+                        if sucesso:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+        st.markdown("---")
+        st.subheader("📋 Usuários Cadastrados")
+        df_u_exibicao = df_u[['usuario', 'nome', 'nivel']].copy()
+        df_u_exibicao['nivel'] = df_u_exibicao['nivel'].apply(lambda x: '3+' if float(x) == 3.5 else str(int(x)) if float(x).is_integer() else str(x))
+        st.dataframe(df_u_exibicao, use_container_width=True)
