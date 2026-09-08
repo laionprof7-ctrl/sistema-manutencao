@@ -257,26 +257,22 @@ def gerar_relatorio_word(df_rel, subtitulo_filtro=""):
                 return val_str
 
     estilos_disponiveis = [s.name for s in doc.styles]
+    sub_style = 'List Bullet 2' if 'List Bullet 2' in estilos_disponiveis else 'List Bullet'
 
-    # Adiciona cada chamado utilizando listas com marcadores limpos
+    # Adiciona cada chamado utilizando listas com marcadores limpos e sem duplicidade
     for _, row in df_rel.iterrows():
         p_os_titulo = doc.add_paragraph(style='List Bullet')
         run_os_num = p_os_titulo.add_run(f"Ordem de Serviço: {str(row.get('ID_OS', ''))}")
         run_os_num.bold = True
         
-        if 'List Bullet 2' in estilos_disponiveis:
-            doc.add_paragraph(f"• Veículo / Equipamento: {str(row.get('Veiculo', ''))}", style='List Bullet 2')
-            doc.add_paragraph(f"• Identificação / Placa: {str(row.get('Placa', ''))}", style='List Bullet 2')
-        else:
-            doc.add_paragraph(f"    - Veículo / Equipamento: {str(row.get('Veiculo', ''))}")
-            doc.add_paragraph(f"    - Identificação / Placa: {str(row.get('Placa', ''))}")
-
-        doc.add_paragraph(f"• Data do Registro: {formatar_data_hora(row.get('Data', ''))}")
-        doc.add_paragraph(f"• Data de Aprovação: {formatar_data_hora(row.get('Data_Aprovacao', ''))}")
-        doc.add_paragraph(f"• Prioridade: {str(row.get('Prioridade', ''))}")
-        doc.add_paragraph(f"• Mecânico Responsável: {str(row.get('Mecanico_Responsavel', ''))}")
-        doc.add_paragraph(f"• Data de Liberação: {formatar_data_hora(row.get('Data_Liberacao', ''))}")
-        doc.add_paragraph(f"• Descrição do Problema: {str(row.get('Descricao_Problema', ''))}")
+        doc.add_paragraph(f"Veículo / Equipamento: {str(row.get('Veiculo', ''))}", style=sub_style)
+        doc.add_paragraph(f"Identificação / Placa: {str(row.get('Placa', ''))}", style=sub_style)
+        doc.add_paragraph(f"Data do Registro: {formatar_data_hora(row.get('Data', ''))}", style=sub_style)
+        doc.add_paragraph(f"Data de Aprovação: {formatar_data_hora(row.get('Data_Aprovacao', ''))}", style=sub_style)
+        doc.add_paragraph(f"Prioridade: {str(row.get('Prioridade', ''))}", style=sub_style)
+        doc.add_paragraph(f"Mecânico Responsável: {str(row.get('Mecanico_Responsavel', ''))}", style=sub_style)
+        doc.add_paragraph(f"Data de Liberação: {formatar_data_hora(row.get('Data_Liberacao', ''))}", style=sub_style)
+        doc.add_paragraph(f"Descrição do Problema: {str(row.get('Descricao_Problema', ''))}", style=sub_style)
         
         doc.add_paragraph() # Espaçador entre os chamados
 
