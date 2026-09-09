@@ -206,7 +206,38 @@ def renderizar_modulo_sst(actor: dict) -> None:
             st.divider()
             st.markdown("#### Histórico de entregas")
             if entregas:
-                st.dataframe(entregas, use_container_width=True, hide_index=True)
+                linhas = []
+                for r in entregas:
+                    data = r["entregue_em"]
+                    try:
+                        data = data.astimezone().strftime("%d/%m/%Y %H:%M")
+                    except Exception:
+                        data = str(data)
+
+                    epi_ca = r["epi"]
+                    if r.get("ca"):
+                        epi_ca += f" · CA {r['ca']}"
+
+                    linhas.append({
+                        "Data": data,
+                        "Colaborador": r["colaborador"],
+                        "Matrícula": r.get("matricula") or "—",
+                        "EPI / CA": epi_ca,
+                        "Quantidade": r["quantidade"],
+                    })
+
+                st.dataframe(
+                    linhas,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Data": st.column_config.TextColumn("Data"),
+                        "Colaborador": st.column_config.TextColumn("Colaborador"),
+                        "Matrícula": st.column_config.TextColumn("Matrícula"),
+                        "EPI / CA": st.column_config.TextColumn("EPI / CA"),
+                        "Quantidade": st.column_config.NumberColumn("Quantidade", format="%d"),
+                    },
+                )
             else:
                 st.info("Nenhuma entrega registrada.")
 
