@@ -7,7 +7,7 @@ import streamlit as st
 from PIL import Image
 
 from config import (
-    ARQUIVO_LOGO, FUSO_BR, LOGIN_LOCK_MINUTES, MAX_LOGIN_ATTEMPTS, NIVEIS,
+    ARQUIVO_LOGO, FUSO_BR, NIVEIS,
     PRIORIDADES, SESSION_IDLE_MINUTES, VEICULOS,
 )
 from database import (
@@ -101,8 +101,6 @@ def _init_state():
         "user_info": None,
         "aba_ativa": "Menu",
         "last_activity": time.time(),
-        "login_failures": 0,
-        "lock_until": 0.0,
         "user_checked_at": 0.0,
     }
     for k, v in defaults.items():
@@ -171,17 +169,12 @@ if not st.session_state.logged_in:
         if mensagem_logout:
             st.info(mensagem_logout)
 
-        bloqueado = time.time() < float(st.session_state.lock_until)
-        if bloqueado:
-            segundos = int(st.session_state.lock_until - time.time())
-            st.warning(f"Muitas tentativas. Tente novamente em aproximadamente {max(1, segundos // 60 + 1)} minuto(s).")
-
         with st.form("login"):
             usuario = normalizar_usuario(st.text_input("Usuário"))
             senha = st.text_input("Senha", type="password")
-            entrar = st.form_submit_button("Entrar", use_container_width=True, disabled=bloqueado)
+            entrar = st.form_submit_button("Entrar", use_container_width=True)
 
-        if entrar and not bloqueado:
+        if entrar:
             dados = obter_usuario(usuario)
             valido = False
             upgrade = False
@@ -194,15 +187,9 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.user_info = obter_usuario(usuario)
                 st.session_state.aba_ativa = "Menu"
-                st.session_state.login_failures = 0
-                st.session_state.lock_until = 0.0
                 st.session_state.last_activity = time.time()
                 st.session_state.user_checked_at = time.time()
                 st.rerun()
-            st.session_state.login_failures += 1
-            if st.session_state.login_failures >= MAX_LOGIN_ATTEMPTS:
-                st.session_state.lock_until = time.time() + LOGIN_LOCK_MINUTES * 60
-                st.session_state.login_failures = 0
             st.error("Usuário ou senha incorretos.")
     st.stop()
 
