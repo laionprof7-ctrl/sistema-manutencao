@@ -385,11 +385,52 @@ if aba == "Oficina":
             with st.expander(f"[{row.Prioridade}] {row.ID_OS} · {row.Veiculo} ({row.Placa})"):
                 st.write(f"**Solicitante:** {row.Motorista} · **Registro:** {row.Data}")
                 st.write(f"**Problema:** {row.Descricao_Problema}")
+
+                # OS concluída é somente consulta para usuários comuns.
+                # O Administrador Global recebe uma ação excepcional e explícita de reabertura.
+                if row.Status == "Concluído":
+                    st.write("**Status:** Concluído")
+                    mecanico_atual = str(row.Mecanico_Responsavel or "").strip()
+                    st.write(f"**Mecânico responsável:** {mecanico_atual if mecanico_atual not in {'', 'nan', 'None'} else 'Não informado'}")
+
+                    data_conclusao = row.Data_Liberacao_dt
+                    try:
+                        data_conclusao = pd.to_datetime(data_conclusao, utc=True, errors="coerce")
+                        if pd.notna(data_conclusao):
+                            data_conclusao = data_conclusao.tz_convert("America/Bahia").strftime("%d/%m/%Y %H:%M")
+                        else:
+                            data_conclusao = "Não informada"
+                    except Exception:
+                        data_conclusao = "Não informada"
+                    st.write(f"**Data de conclusão:** {data_conclusao}")
+
+                    if pode_gerir_os(nivel_user):
+                        st.divider()
+                        st.caption("🔓 Administrador Global: use esta ação somente para corrigir uma conclusão indevida. A reabertura será registrada na Auditoria.")
+                        confirmar_reabertura = st.checkbox(
+                            "Confirmo a reabertura desta OS",
+                            key=f"conf_reabrir_{row.id}",
+                        )
+                        if st.button(
+                            "Reabrir OS",
+                            key=f"reabrir_{row.id}",
+                            disabled=not confirmar_reabertura,
+                            use_container_width=True,
+                        ):
+                            ok, _ = executar(
+                                atualizar_oficina,
+                                user_data,
+                                row.id,
+                                "Em Andamento",
+                                mecanico_atual,
+                                row.Versao,
+                            )
+                            if ok: st.rerun()
+                    continue
+
                 fluxo_status = ["Aguardando Manutenção", "Em Andamento", "Concluído"]
                 if row.Status in fluxo_status:
                     indice_atual = fluxo_status.index(row.Status)
-                    # Fluxo normal é somente progressivo. O Administrador Global pode
-                    # corrigir/reabrir uma OS quando houver erro operacional.
                     op = fluxo_status if pode_gerir_os(nivel_user) else fluxo_status[indice_atual:]
                 else:
                     op = fluxo_status
@@ -400,8 +441,6 @@ if aba == "Oficina":
                     index=op.index(row.Status) if row.Status in op else 0,
                     key=f"status_{row.id}",
                 )
-                if pode_gerir_os(nivel_user) and row.Status == "Concluído":
-                    st.caption("🔓 Administrador Global: esta OS pode ser reaberta para correção. A ação será registrada na Auditoria.")
                 bloqueado = str(row.Mecanico_Responsavel or "").strip() not in {"", "Não Atribuído", "nan", "None"}
                 mecanico = st.text_input("Mecânico responsável", value=row.Mecanico_Responsavel if bloqueado else "", disabled=bloqueado, key=f"mec_{row.id}")
                 if bloqueado: st.caption("🔒 O responsável fica fixo após a primeira atribuição.")
