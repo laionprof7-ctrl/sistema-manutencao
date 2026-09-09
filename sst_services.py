@@ -407,24 +407,33 @@ def registrar_assinatura_biometrica(
 
 
 def listar_entregas(limite: int = 200) -> list[dict]:
+    """Lista os itens entregues em formato operacional enxuto."""
     limite = max(1, min(int(limite), 1000))
     stmt = (
         select(
-            ENTREGAS_EPI.c.id,
             ENTREGAS_EPI.c.entregue_em,
-            ENTREGAS_EPI.c.status,
-            ENTREGAS_EPI.c.observacao,
-            ENTREGAS_EPI.c.responsavel_usuario,
             COLABORADORES.c.nome.label("colaborador"),
             COLABORADORES.c.matricula.label("matricula"),
+            EPIS.c.nome.label("epi"),
+            ITENS_ENTREGA_EPI.c.ca_no_momento.label("ca"),
+            ITENS_ENTREGA_EPI.c.quantidade,
         )
         .select_from(
-            ENTREGAS_EPI.join(
+            ENTREGAS_EPI
+            .join(
                 COLABORADORES,
                 ENTREGAS_EPI.c.colaborador_id == COLABORADORES.c.id,
             )
+            .join(
+                ITENS_ENTREGA_EPI,
+                ITENS_ENTREGA_EPI.c.entrega_id == ENTREGAS_EPI.c.id,
+            )
+            .join(
+                EPIS,
+                ITENS_ENTREGA_EPI.c.epi_id == EPIS.c.id,
+            )
         )
-        .order_by(ENTREGAS_EPI.c.entregue_em.desc())
+        .order_by(ENTREGAS_EPI.c.entregue_em.desc(), ITENS_ENTREGA_EPI.c.id.asc())
         .limit(limite)
     )
     with transacao() as conn:
