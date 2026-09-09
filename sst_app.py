@@ -8,7 +8,7 @@ para testes integrados.
 
 import streamlit as st
 
-from sst_database import inicializar_sst
+from sst_database import inicializar_banco_sst
 from sst_services import (
     cadastrar_colaborador,
     cadastrar_epi,
@@ -30,7 +30,7 @@ def _executar(funcao, *args, **kwargs):
 
 def renderizar_modulo_sst(actor: dict) -> None:
     """Renderiza a interface inicial do módulo SST/EPI."""
-    inicializar_sst()
+    inicializar_banco_sst()
 
     st.title("🦺 SST / EPI")
     st.caption("Gestão de colaboradores, EPIs, entregas e documentos de Segurança do Trabalho.")
@@ -70,7 +70,7 @@ def renderizar_modulo_sst(actor: dict) -> None:
                     st.success("Colaborador cadastrado com sucesso.")
                     st.rerun()
 
-        ok, colaboradores = _executar(listar_colaboradores, somente_ativos=True)
+        ok, colaboradores = _executar(listar_colaboradores, apenas_ativos=True)
         if ok:
             if colaboradores:
                 st.dataframe(colaboradores, use_container_width=True, hide_index=True)
@@ -100,7 +100,7 @@ def renderizar_modulo_sst(actor: dict) -> None:
                     st.success("EPI cadastrado com sucesso.")
                     st.rerun()
 
-        ok, epis = _executar(listar_epis, somente_ativos=True)
+        ok, epis = _executar(listar_epis, apenas_ativos=True)
         if ok:
             if epis:
                 st.dataframe(epis, use_container_width=True, hide_index=True)
