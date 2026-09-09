@@ -373,3 +373,57 @@ def registrar_assinatura_biometrica(
             f"assinatura_id={assinatura_id};colaborador_id={colaborador_id}"
         )
         return assinatura_id
+
+
+
+def listar_entregas(limite: int = 200) -> list[dict]:
+    limite = max(1, min(int(limite), 1000))
+    stmt = (
+        select(
+            ENTREGAS_EPI.c.id,
+            ENTREGAS_EPI.c.entregue_em,
+            ENTREGAS_EPI.c.status,
+            ENTREGAS_EPI.c.observacao,
+            ENTREGAS_EPI.c.responsavel_usuario,
+            COLABORADORES.c.nome.label("colaborador"),
+            COLABORADORES.c.matricula.label("matricula"),
+        )
+        .select_from(
+            ENTREGAS_EPI.join(
+                COLABORADORES,
+                ENTREGAS_EPI.c.colaborador_id == COLABORADORES.c.id,
+            )
+        )
+        .order_by(ENTREGAS_EPI.c.entregue_em.desc())
+        .limit(limite)
+    )
+    with transacao() as conn:
+        return [dict(r) for r in conn.execute(stmt).mappings().all()]
+
+
+def listar_documentos(limite: int = 200) -> list[dict]:
+    limite = max(1, min(int(limite), 1000))
+    stmt = (
+        select(
+            DOCUMENTOS_SST.c.id,
+            DOCUMENTOS_SST.c.numero,
+            DOCUMENTOS_SST.c.tipo,
+            DOCUMENTOS_SST.c.motivo,
+            DOCUMENTOS_SST.c.titulo,
+            DOCUMENTOS_SST.c.status,
+            DOCUMENTOS_SST.c.criado_em,
+            DOCUMENTOS_SST.c.fechado_em,
+            COLABORADORES.c.nome.label("colaborador"),
+            COLABORADORES.c.matricula.label("matricula"),
+        )
+        .select_from(
+            DOCUMENTOS_SST.join(
+                COLABORADORES,
+                DOCUMENTOS_SST.c.colaborador_id == COLABORADORES.c.id,
+            )
+        )
+        .order_by(DOCUMENTOS_SST.c.criado_em.desc())
+        .limit(limite)
+    )
+    with transacao() as conn:
+        return [dict(r) for r in conn.execute(stmt).mappings().all()]
