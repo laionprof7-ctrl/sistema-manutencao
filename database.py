@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -142,7 +142,36 @@ def listar_usuarios() -> pd.DataFrame:
         return pd.read_sql(select(USUARIOS).order_by(USUARIOS.c.nome), conn)
 
 
+def arquivar_chamados_expirados() -> int:
+    """Arquiva automaticamente OS não aprovadas há mais de 7 dias, preservando o histórico."""
+    limite = utcnow() - timedelta(days=7)
+    with ENGINE.begin() as conn:
+        expirados = conn.execute(
+            select(CHAMADOS.c.id, CHAMADOS.c.id_os).where(
+                (CHAMADOS.c.aprovado_coordenador == False)
+                & (CHAMADOS.c.arquivado == False)
+                & (CHAMADOS.c.excluido == False)
+                & (CHAMADOS.c.criado_em < limite)
+            )
+        ).mappings().all()
+        if not expirados:
+            return 0
+        ids = [r["id"] for r in expirados]
+        conn.execute(
+            update(CHAMADOS)
+            .where(CHAMADOS.c.id.in_(ids))
+            .values(arquivado=True, atualizado_em=utcnow(), versao=CHAMADOS.c.versao + 1)
+        )
+        for row in expirados:
+            registrar_auditoria(
+                conn, "sistema", "OS_ARQUIVADA_EXPIRACAO", "chamado", row["id_os"],
+                "Chamado não aprovado no prazo de 7 dias."
+            )
+        return len(expirados)
+
+
 def listar_chamados() -> pd.DataFrame:
+    arquivar_chamados_expirados()
     stmt = select(
         CHAMADOS.c.id,
         CHAMADOS.c.id_os.label("ID_OS"),
@@ -183,13 +212,20 @@ def listar_chamados() -> pd.DataFrame:
 
 
 def resumo_chamados() -> dict[str, int]:
-    """Retorna somente os contadores usados no dashboard, sem carregar todas as OS."""
+    """Contadores do dashboard; concluídos considera somente os últimos 7 dias."""
     from sqlalchemy import case, func
 
+    arquivar_chamados_expirados()
+    limite_concluidos = utcnow() - timedelta(days=7)
     stmt = select(
         func.count(case((CHAMADOS.c.status == "Aguardando Aprovação", 1))).label("pendentes"),
         func.count(case((CHAMADOS.c.status == "Em Andamento", 1))).label("andamento"),
-        func.count(case((CHAMADOS.c.status == "Concluído", 1))).label("concluidos"),
+        func.count(case((
+            (CHAMADOS.c.status == "Concluído")
+            & (CHAMADOS.c.data_liberacao.is_not(None))
+            & (CHAMADOS.c.data_liberacao >= limite_concluidos),
+            1
+        ))).label("concluidos"),
     ).where(
         (CHAMADOS.c.excluido == False) & (CHAMADOS.c.arquivado == False)
     )

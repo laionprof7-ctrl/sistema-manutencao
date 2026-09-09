@@ -225,15 +225,23 @@ aba = st.session_state.aba_ativa
 if aba == "Menu":
     st.title("Menu Principal")
     st.caption(f"Bem-vindo, {user_data['nome']}")
-    try:
-        resumo = carregar_resumo()
-    except Exception:
-        resumo = {"pendentes": 0, "andamento": 0, "concluidos": 0}
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Aguardando aprovação", resumo["pendentes"])
-    m2.metric("Em andamento", resumo["andamento"])
-    m3.metric("Concluídos", resumo["concluidos"])
-    st.write("")
+
+    # Motoristas (nível 1) não precisam visualizar indicadores operacionais da gestão.
+    if nivel_user != 1.0:
+        @st.fragment(run_every=30)
+        def painel_resumo():
+            try:
+                resumo = carregar_resumo()
+            except Exception:
+                resumo = {"pendentes": 0, "andamento": 0, "concluidos": 0}
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Aguardando aprovação", resumo["pendentes"])
+            m2.metric("Em andamento", resumo["andamento"])
+            m3.metric("Concluídos · últimos 7 dias", resumo["concluidos"])
+            st.caption("Indicadores atualizados automaticamente a cada 30 segundos.")
+
+        painel_resumo()
+        st.write("")
     opcoes = [("📝 Abrir Chamado", "Abrir Chamado"), ("🔍 Consultar Chamados", "Consultar Chamados")]
     if pode_ver_oficina(nivel_user): opcoes.append(("🛠️ Painel da Oficina", "Oficina"))
     if pode_triagem(nivel_user): opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
