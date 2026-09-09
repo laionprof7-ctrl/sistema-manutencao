@@ -8,6 +8,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    inspect,
+    text,
     MetaData,
     String,
     Table,
@@ -52,6 +54,7 @@ EPIS = Table(
     Column("nome", String(180), nullable=False),
     Column("ca", String(40), nullable=True),
     Column("fabricante", String(160), nullable=True),
+    Column("validade_ca", Date, nullable=True),
     Column("unidade", String(40), nullable=False, default="unidade"),
     Column("ativo", Boolean, nullable=False, default=True),
     Column("criado_em", DateTime(timezone=True), nullable=False),
@@ -144,5 +147,13 @@ TABELAS_SST = [
 
 
 def inicializar_banco_sst() -> None:
-    """Cria apenas as tabelas do módulo SST/EPI que ainda não existirem."""
+    """Cria tabelas e aplica migrações simples e seguras do módulo SST/EPI."""
     METADATA.create_all(ENGINE, tables=TABELAS_SST)
+
+    # create_all não adiciona colunas a tabelas já existentes.
+    # Esta migração preserva os EPIs já cadastrados.
+    insp = inspect(ENGINE)
+    colunas_epi = {c["name"] for c in insp.get_columns("sst_epis")}
+    if "validade_ca" not in colunas_epi:
+        with ENGINE.begin() as conn:
+            conn.execute(text("ALTER TABLE sst_epis ADD COLUMN validade_ca DATE"))
