@@ -19,8 +19,8 @@ from reports import gerar_relatorio_word
 from security import hash_senha, normalizar_usuario, verificar_senha
 from services import (
     ConcorrenciaError, RegraNegocioError, alterar_nome, alterar_nivel, aprovar_chamado,
-    arquivar_chamado, atualizar_oficina, criar_chamado, criar_usuario, excluir_chamado,
-    excluir_usuario, reativar_usuario, redefinir_senha,
+    alterar_propria_senha, arquivar_chamado, atualizar_oficina, criar_chamado, criar_usuario,
+    excluir_chamado, excluir_usuario, reativar_usuario, redefinir_senha,
 )
 from sqlalchemy import update
 
@@ -245,7 +245,10 @@ if aba == "Menu":
     opcoes = [("📝 Abrir Chamado", "Abrir Chamado"), ("🔍 Consultar Chamados", "Consultar Chamados")]
     if pode_ver_oficina(nivel_user): opcoes.append(("🛠️ Painel da Oficina", "Oficina"))
     if pode_triagem(nivel_user): opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
-    if pode_gerir_usuarios(nivel_user): opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
+    if pode_gerir_usuarios(nivel_user):
+        opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
+    else:
+        opcoes.append(("🔑 Alterar minha senha", "Minha Senha"))
     if pode_gerir_os(nivel_user): opcoes.append(("🧾 Auditoria", "Auditoria"))
 
     # Navegação principal também fica no corpo da página para funcionar bem no celular,
@@ -466,6 +469,41 @@ if aba == "Oficina":
         if fp.strip(): hist = hist[hist["Placa"].astype(str).str.contains(fp, case=False, na=False) | hist["ID_OS"].astype(str).str.contains(fp, case=False, na=False)]
         st.dataframe(hist[["ID_OS", "Data", "Veiculo", "Placa", "Status", "Prioridade", "Mecanico_Responsavel", "Data_Liberacao"]], use_container_width=True, hide_index=True)
     st.stop()
+
+
+# ---------- Minha senha ----------
+if aba == "Minha Senha":
+    # Usuários que já possuem Gestão de Usuários usam a área administrativa.
+    if pode_gerir_usuarios(nivel_user):
+        st.error("Acesso não autorizado."); st.stop()
+
+    st.header("🔑 Alterar minha senha")
+    st.caption("Para sua segurança, informe a senha atual antes de definir uma nova.")
+
+    with st.form("alterar_minha_senha", clear_on_submit=True):
+        senha_atual = st.text_input("Senha atual", type="password")
+        nova_senha = st.text_input(
+            "Nova senha",
+            type="password",
+            help="Mínimo de 8 caracteres, com maiúscula, minúscula e número.",
+        )
+        confirmar_nova = st.text_input("Confirmar nova senha", type="password")
+        alterar = st.form_submit_button("Alterar senha", use_container_width=True)
+
+    if alterar:
+        if nova_senha != confirmar_nova:
+            st.error("A confirmação da nova senha não confere.")
+        else:
+            ok, _ = executar(
+                alterar_propria_senha,
+                user_data,
+                senha_atual,
+                nova_senha,
+            )
+            if ok:
+                sair("Senha alterada com sucesso. Entre novamente com a nova senha.")
+    st.stop()
+
 
 # ---------- Usuários ----------
 if aba == "Usuarios":
