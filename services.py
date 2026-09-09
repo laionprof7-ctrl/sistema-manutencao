@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from database import AUDITORIA, CHAMADOS, CONTADORES, USUARIOS, registrar_auditoria, transacao, utcnow
 from permissions import pode_conceder_nivel, pode_editar_usuario, pode_gerir_os, pode_gerir_usuarios, pode_triagem, pode_ver_oficina
-from security import hash_senha, usuario_valido, validar_senha_forte
+from security import hash_senha, usuario_valido, validar_senha_forte, verificar_senha
 
 class RegraNegocioError(ValueError):
     pass
@@ -82,6 +82,41 @@ def redefinir_senha(actor: dict, alvo: str, nova_senha: str) -> None:
             raise RegraNegocioError("Sem permissão para redefinir essa senha.")
         conn.execute(update(USUARIOS).where(USUARIOS.c.usuario == alvo).values(senha=hash_senha(nova_senha), atualizado_em=utcnow()))
         registrar_auditoria(conn, actor["usuario"], "USUARIO_SENHA_REDEFINIDA", "usuario", alvo)
+
+
+def alterar_propria_senha(actor: dict, senha_atual: str, nova_senha: str) -> None:
+    senha_atual = senha_atual or ""
+    nova_senha = nova_senha or ""
+
+    ok, msg = validar_senha_forte(nova_senha)
+    if not ok:
+        raise RegraNegocioError(msg)
+
+    with transacao() as conn:
+        row = _usuario(conn, actor["usuario"])
+        if not row or not bool(row["ativo"]):
+            raise RegraNegocioError("Conta indisponível.")
+
+        senha_valida, _ = verificar_senha(senha_atual, row["senha"])
+        if not senha_valida:
+            raise RegraNegocioError("Senha atual incorreta.")
+
+        mesma_senha, _ = verificar_senha(nova_senha, row["senha"])
+        if mesma_senha:
+            raise RegraNegocioError("A nova senha deve ser diferente da senha atual.")
+
+        conn.execute(
+            update(USUARIOS)
+            .where(USUARIOS.c.usuario == actor["usuario"])
+            .values(senha=hash_senha(nova_senha), atualizado_em=utcnow())
+        )
+        registrar_auditoria(
+            conn,
+            actor["usuario"],
+            "USUARIO_SENHA_ALTERADA",
+            "usuario",
+            actor["usuario"],
+        )
 
 
 def excluir_usuario(actor: dict, alvo: str) -> None:
