@@ -402,9 +402,6 @@ if aba == "Oficina":
                 )
                 if pode_gerir_os(nivel_user) and row.Status == "Concluído":
                     st.caption("🔓 Administrador Global: esta OS pode ser reaberta para correção. A ação será registrada na Auditoria.")
-                elif not pode_gerir_os(nivel_user):
-                    st.caption("➡️ O progresso da OS é somente progressivo.")
-
                 bloqueado = str(row.Mecanico_Responsavel or "").strip() not in {"", "Não Atribuído", "nan", "None"}
                 mecanico = st.text_input("Mecânico responsável", value=row.Mecanico_Responsavel if bloqueado else "", disabled=bloqueado, key=f"mec_{row.id}")
                 if bloqueado: st.caption("🔒 O responsável fica fixo após a primeira atribuição.")
