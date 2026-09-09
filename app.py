@@ -478,12 +478,26 @@ if aba == "Usuarios":
     if "usuarios" not in locals():
         usuarios = carregar_usuarios()
 
+    def formatar_data_usuario(serie):
+        return (
+            pd.to_datetime(serie, utc=True, errors="coerce")
+            .dt.tz_convert("America/Bahia")
+            .dt.strftime("%d/%m/%Y %H:%M")
+            .fillna("")
+        )
+
     ativos = usuarios[usuarios["ativo"] == True] if not usuarios.empty else usuarios
     st.subheader("✅ Usuários ativos")
     if ativos.empty:
         st.info("Nenhum usuário ativo.")
     else:
-        tabela_ativos = ativos[["usuario", "nome", "nivel", "criado_em", "atualizado_em"]]
+        tabela_ativos = ativos[["usuario", "nome", "nivel", "criado_em", "atualizado_em"]].copy()
+        tabela_ativos["criado_em"] = formatar_data_usuario(tabela_ativos["criado_em"])
+        tabela_ativos["atualizado_em"] = formatar_data_usuario(tabela_ativos["atualizado_em"])
+        tabela_ativos = tabela_ativos.rename(columns={
+            "usuario": "Usuário", "nome": "Nome", "nivel": "Nível",
+            "criado_em": "Criado em", "atualizado_em": "Atualizado em"
+        })
         st.dataframe(tabela_ativos, use_container_width=True, hide_index=True)
 
     inativos = usuarios[usuarios["ativo"] == False] if not usuarios.empty else usuarios
@@ -491,7 +505,12 @@ if aba == "Usuarios":
         if inativos.empty:
             st.info("Nenhum usuário desativado.")
         else:
-            tabela_inativos = inativos[["usuario", "nome", "nivel", "atualizado_em"]]
+            tabela_inativos = inativos[["usuario", "nome", "nivel", "atualizado_em"]].copy()
+            tabela_inativos["atualizado_em"] = formatar_data_usuario(tabela_inativos["atualizado_em"])
+            tabela_inativos = tabela_inativos.rename(columns={
+                "usuario": "Usuário", "nome": "Nome", "nivel": "Nível",
+                "atualizado_em": "Desativado / atualizado em"
+            })
             st.dataframe(tabela_inativos, use_container_width=True, hide_index=True)
             mapa_inativos = {f"{r.nome} ({r.usuario})": r for r in inativos.itertuples()}
             escolha_inativo = st.selectbox("Selecione uma conta para reativar", list(mapa_inativos.keys()), key="reativar_usuario_sel")
