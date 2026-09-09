@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import date, datetime
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
@@ -78,6 +80,25 @@ def _epi(conn, epi_id: int):
     return conn.execute(select(EPIS).where(EPIS.c.id == int(epi_id))).mappings().first()
 
 
+def _hoje_bahia() -> date:
+    return datetime.now(ZoneInfo("America/Bahia")).date()
+
+
+def _desativar_epis_ca_vencido(conn) -> int:
+    """Desativa EPIs cujo CA venceu, preservando todo o histórico."""
+    hoje = _hoje_bahia()
+    result = conn.execute(
+        update(EPIS)
+        .where(
+            EPIS.c.ativo == True,
+            EPIS.c.validade_ca.is_not(None),
+            EPIS.c.validade_ca < hoje,
+        )
+        .values(ativo=False, atualizado_em=utcnow())
+    )
+    return int(result.rowcount or 0)
+
+
 def cadastrar_colaborador(
     actor: dict,
     nome: str,
@@ -150,12 +171,15 @@ def cadastrar_epi(
     ca: str | None = None,
     fabricante: str | None = None,
     unidade: str = "unidade",
+    validade_ca: date | None = None,
 ) -> int:
     _exigir_administracao(actor)
     nome = _texto(nome, 180, True)
     ca = _texto(ca, 40)
     fabricante = _texto(fabricante, 160)
     unidade = _texto(unidade, 40, True)
+    if validade_ca is not None and validade_ca < _hoje_bahia():
+        raise RegraSSTError("A validade do CA não pode estar vencida no momento do cadastro.")
     now = utcnow()
 
     try:
@@ -164,6 +188,7 @@ def cadastrar_epi(
                 nome=nome,
                 ca=ca,
                 fabricante=fabricante,
+                validade_ca=validade_ca,
                 unidade=unidade,
                 ativo=True,
                 criado_em=now,
@@ -172,7 +197,8 @@ def cadastrar_epi(
             epi_id = int(result.inserted_primary_key[0])
             registrar_auditoria(
                 conn, actor["usuario"], "SST_EPI_CRIADO",
-                "sst_epi", str(epi_id), f"nome={nome};ca={ca or ''}"
+                "sst_epi", str(epi_id),
+                f"nome={nome};ca={ca or ''};validade_ca={validade_ca or ''}"
             )
             return epi_id
     except IntegrityError as exc:
@@ -185,6 +211,7 @@ def listar_epis(apenas_ativos: bool = True) -> list[dict]:
         stmt = stmt.where(EPIS.c.ativo == True)
     stmt = stmt.order_by(EPIS.c.nome)
     with transacao() as conn:
+        _desativar_epis_ca_vencido(conn)
         return [dict(r) for r in conn.execute(stmt).mappings().all()]
 
 
@@ -202,6 +229,7 @@ def registrar_entrega_epi(
     now = utcnow()
 
     with transacao() as conn:
+        _desativar_epis_ca_vencido(conn)
         colaborador = _colaborador(conn, colaborador_id)
         if not colaborador or not colaborador["ativo"]:
             raise RegraSSTError("Colaborador indisponível para entrega.")
@@ -214,7 +242,9 @@ def registrar_entrega_epi(
                 raise RegraSSTError("Quantidade de EPI inválida.")
             epi = _epi(conn, epi_id)
             if not epi or not epi["ativo"]:
-                raise RegraSSTError("Um dos EPIs está indisponível.")
+                raise RegraSSTError("Um dos EPIs está indisponível ou possui CA vencido.")
+            if epi["validade_ca"] is not None and epi["validade_ca"] < _hoje_bahia():
+                raise RegraSSTError("Não é permitido entregar EPI com CA vencido.")
             preparados.append((epi, quantidade))
 
         result = conn.execute(insert(ENTREGAS_EPI).values(
