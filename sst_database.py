@@ -8,24 +8,17 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    inspect,
-    text,
-    MetaData,
+    LargeBinary,
     String,
     Table,
     Text,
     UniqueConstraint,
+    inspect,
+    text,
 )
 
 from database import ENGINE, METADATA
 
-
-# -----------------------------------------------------------------------------
-# Módulo SST / EPI
-# -----------------------------------------------------------------------------
-# As tabelas abaixo usam o MESMO MetaData e a MESMA engine do sistema matriz.
-# Isso preserva a arquitetura atual e permite criar o módulo sem alterar as
-# tabelas de manutenção já existentes.
 
 COLABORADORES = Table(
     "sst_colaboradores",
@@ -52,7 +45,7 @@ EPIS = Table(
     METADATA,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("nome", String(180), nullable=False),
-    Column("ca", String(40), nullable=True),
+    Column("ca", String(40), nullable=False),
     Column("fabricante", String(160), nullable=True),
     Column("validade_ca", Date, nullable=True),
     Column("unidade", String(40), nullable=False, default="unidade"),
@@ -63,6 +56,7 @@ EPIS = Table(
 )
 Index("ix_sst_epi_nome", EPIS.c.nome)
 Index("ix_sst_epi_ativo", EPIS.c.ativo)
+Index("ix_sst_epi_validade_ca", EPIS.c.validade_ca)
 
 
 ENTREGAS_EPI = Table(
@@ -88,6 +82,7 @@ ITENS_ENTREGA_EPI = Table(
     Column("epi_id", Integer, ForeignKey("sst_epis.id", ondelete="RESTRICT"), nullable=False),
     Column("quantidade", Integer, nullable=False, default=1),
     Column("ca_no_momento", String(40), nullable=True),
+    Column("validade_ca_no_momento", Date, nullable=True),
 )
 Index("ix_sst_item_entrega", ITENS_ENTREGA_EPI.c.entrega_id)
 
@@ -101,10 +96,10 @@ DOCUMENTOS_SST = Table(
     Column("tipo", String(80), nullable=False),
     Column("motivo", String(80), nullable=True),
     Column("titulo", String(220), nullable=False),
-    # Snapshot textual/JSON do conteúdo que originou o documento.
-    # O hash definitivo será gravado quando o PDF for fechado para assinatura.
     Column("conteudo_snapshot", Text, nullable=True),
     Column("hash_documento", String(64), nullable=True),
+    Column("pdf_arquivo", LargeBinary, nullable=True),
+    Column("nome_arquivo", String(255), nullable=True),
     Column("status", String(30), nullable=False, default="Rascunho"),
     Column("criado_por", String(40), ForeignKey("usuarios.usuario", ondelete="SET NULL"), nullable=True),
     Column("criado_em", DateTime(timezone=True), nullable=False),
@@ -126,8 +121,6 @@ ASSINATURAS_SST = Table(
     Column("hash_documento", String(64), nullable=False),
     Column("assinado_em", DateTime(timezone=True), nullable=False),
     Column("estacao", String(160), nullable=True),
-    # Referência técnica futura retornada pelo componente/SDK biométrico.
-    # NÃO armazena imagem de impressão digital.
     Column("referencia_biometrica", String(255), nullable=True),
     Column("detalhes", Text, nullable=True),
 )
@@ -146,14 +139,22 @@ TABELAS_SST = [
 ]
 
 
+def _adicionar_coluna_se_ausente(tabela: str, coluna: str, ddl: str) -> None:
+    insp = inspect(ENGINE)
+    existentes = {c["name"] for c in insp.get_columns(tabela)}
+    if coluna not in existentes:
+        with ENGINE.begin() as conn:
+            conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {ddl}"))
+
+
 def inicializar_banco_sst() -> None:
-    """Cria tabelas e aplica migrações simples e seguras do módulo SST/EPI."""
+    """Cria tabelas SST e aplica migrações aditivas, sem apagar dados existentes."""
     METADATA.create_all(ENGINE, tables=TABELAS_SST)
 
-    # create_all não adiciona colunas a tabelas já existentes.
-    # Esta migração preserva os EPIs já cadastrados.
-    insp = inspect(ENGINE)
-    colunas_epi = {c["name"] for c in insp.get_columns("sst_epis")}
-    if "validade_ca" not in colunas_epi:
-        with ENGINE.begin() as conn:
-            conn.execute(text("ALTER TABLE sst_epis ADD COLUMN validade_ca DATE"))
+    _adicionar_coluna_se_ausente("sst_epis", "validade_ca", "DATE")
+    _adicionar_coluna_se_ausente("sst_itens_entrega_epi", "validade_ca_no_momento", "DATE")
+
+    # PostgreSQL usa BYTEA; SQLite usa BLOB.
+    binario = "BYTEA" if ENGINE.dialect.name == "postgresql" else "BLOB"
+    _adicionar_coluna_se_ausente("sst_documentos", "pdf_arquivo", binario)
+    _adicionar_coluna_se_ausente("sst_documentos", "nome_arquivo", "VARCHAR(255)")
