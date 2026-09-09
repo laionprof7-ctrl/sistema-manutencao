@@ -24,8 +24,11 @@ st.caption(
 # Ator temporário somente para a interface de desenvolvimento.
 # Quando integrarmos ao sistema matriz, será substituído pelo usuário
 # autenticado no login principal.
+# ATENÇÃO: "usuario" precisa existir na tabela usuarios porque as entregas
+# possuem chave estrangeira para o responsável. Para o teste isolado,
+# informe abaixo o login de um usuário REAL já cadastrado no sistema.
 actor_teste = {
-    "usuario": "desenvolvimento-sst",
+    "usuario": "admin",
     "nome": "Ambiente de Desenvolvimento",
     "nivel": 4.0,
 }
