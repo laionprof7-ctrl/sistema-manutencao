@@ -385,8 +385,26 @@ if aba == "Oficina":
             with st.expander(f"[{row.Prioridade}] {row.ID_OS} · {row.Veiculo} ({row.Placa})"):
                 st.write(f"**Solicitante:** {row.Motorista} · **Registro:** {row.Data}")
                 st.write(f"**Problema:** {row.Descricao_Problema}")
-                op = ["Aguardando Manutenção", "Em Andamento", "Concluído"]
-                novo_status = st.selectbox("Status", op, index=op.index(row.Status) if row.Status in op else 0, key=f"status_{row.id}")
+                fluxo_status = ["Aguardando Manutenção", "Em Andamento", "Concluído"]
+                if row.Status in fluxo_status:
+                    indice_atual = fluxo_status.index(row.Status)
+                    # Fluxo normal é somente progressivo. O Administrador Global pode
+                    # corrigir/reabrir uma OS quando houver erro operacional.
+                    op = fluxo_status if pode_gerir_os(nivel_user) else fluxo_status[indice_atual:]
+                else:
+                    op = fluxo_status
+
+                novo_status = st.selectbox(
+                    "Status",
+                    op,
+                    index=op.index(row.Status) if row.Status in op else 0,
+                    key=f"status_{row.id}",
+                )
+                if pode_gerir_os(nivel_user) and row.Status == "Concluído":
+                    st.caption("🔓 Administrador Global: esta OS pode ser reaberta para correção. A ação será registrada na Auditoria.")
+                elif not pode_gerir_os(nivel_user):
+                    st.caption("➡️ O progresso da OS é somente progressivo.")
+
                 bloqueado = str(row.Mecanico_Responsavel or "").strip() not in {"", "Não Atribuído", "nan", "None"}
                 mecanico = st.text_input("Mecânico responsável", value=row.Mecanico_Responsavel if bloqueado else "", disabled=bloqueado, key=f"mec_{row.id}")
                 if bloqueado: st.caption("🔒 O responsável fica fixo após a primeira atribuição.")
