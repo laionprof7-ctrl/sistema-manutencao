@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -15,7 +16,7 @@ from database import (
     obter_usuario, transacao, USUARIOS, utcnow,
 )
 from permissions import pode_editar_usuario, pode_gerir_os, pode_gerir_usuarios, pode_triagem, pode_ver_oficina
-from reports import gerar_relatorio_word
+from reports import gerar_relatorio_pdf
 from security import hash_senha, normalizar_usuario, verificar_senha
 from services import (
     ConcorrenciaError, RegraNegocioError, alterar_nome, alterar_nivel, aprovar_chamado,
@@ -83,6 +84,11 @@ def carregar_auditoria(limite: int = 500):
 @st.cache_data(ttl=10, show_spinner=False)
 def carregar_resumo():
     return resumo_chamados()
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def gerar_pdf_em_cache(df_rel: pd.DataFrame, subtitulo: str = "") -> bytes:
+    return gerar_relatorio_pdf(df_rel, subtitulo)
 
 
 def limpar_cache_dados():
@@ -319,12 +325,41 @@ if aba == "Consultar Chamados":
     if pode_triagem(nivel_user) and not df.empty:
         with st.container(border=True):
             st.subheader("📥 Relatório individual")
-            veiculos = sorted(df["Veiculo"].dropna().astype(str).unique().tolist())
-            escolhido = st.selectbox("Veículo / Equipamento", veiculos)
-            arquivo = gerar_relatorio_word(df[df["Veiculo"] == escolhido], f"Veículo / Equipamento: {escolhido}")
-            st.download_button("Baixar relatório Word", arquivo,
-                file_name=f"relatorio_manutencao_{escolhido.replace(' ', '_').lower()}_{datetime.now(FUSO_BR).strftime('%Y%m%d_%H%M')}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True, on_click="ignore")
+
+            opcoes_relatorio = {
+                f"{r.ID_OS} · {r.Veiculo} ({r.Placa})": r.id
+                for r in df.itertuples()
+            }
+
+            rotulo_relatorio = st.selectbox(
+                "Ordem de Serviço",
+                list(opcoes_relatorio.keys()),
+                key="relatorio_os_selecionada",
+            )
+
+            id_relatorio = opcoes_relatorio[rotulo_relatorio]
+            df_relatorio = df[df["id"] == id_relatorio].copy()
+            row_relatorio = df_relatorio.iloc[0]
+
+            id_os_relatorio = str(row_relatorio["ID_OS"]).strip()
+            veiculo_relatorio = str(row_relatorio["Veiculo"]).strip()
+
+            arquivo = gerar_pdf_em_cache(
+                df_relatorio,
+                f"Ordem de Serviço: {id_os_relatorio}",
+            )
+
+            nome_veiculo = re.sub(r"[^A-Za-z0-9_-]+", "_", veiculo_relatorio).strip("_")
+            nome_arquivo = f"Relatorio_{id_os_relatorio}_{nome_veiculo}.pdf"
+
+            st.download_button(
+                "Baixar relatório PDF",
+                arquivo,
+                file_name=nome_arquivo,
+                mime="application/pdf",
+                use_container_width=True,
+                on_click="ignore",
+            )
 
     if pode_gerir_os(nivel_user) and not df_os.empty:
         with st.container(border=True):
