@@ -19,9 +19,9 @@ from sst_services import (
 )
 
 
-def _executar(funcao, *args, **kwargs):
+def _executar(operacao, *args, **kwargs):
     try:
-        resultado = funcao(*args, **kwargs)
+        resultado = operacao(*args, **kwargs)
         return True, resultado
     except Exception as exc:
         st.error(str(exc))
