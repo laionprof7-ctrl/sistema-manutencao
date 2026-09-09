@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
@@ -21,6 +21,9 @@ from sst_database import (
 )
 
 
+TZ_BAHIA = ZoneInfo("America/Bahia")
+
+
 class RegraSSTError(ValueError):
     pass
 
@@ -33,8 +36,6 @@ def _nivel(actor: dict) -> float:
 
 
 def _pode_operar_sst(actor: dict) -> bool:
-    # Regra inicial da branch de desenvolvimento.
-    # Antes de produção, poderá ser substituída por permissões próprias do módulo SST.
     return _nivel(actor) >= 3.0
 
 
@@ -61,13 +62,30 @@ def _texto(valor: str | None, limite: int, obrigatorio: bool = False) -> str | N
     return texto or None
 
 
+def _cpf_valido(digitos: str) -> bool:
+    if len(digitos) != 11 or digitos == digitos[0] * 11:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(digitos[i]) * (tamanho + 1 - i) for i in range(tamanho))
+        dv = (soma * 10) % 11
+        if dv == 10:
+            dv = 0
+        if dv != int(digitos[tamanho]):
+            return False
+    return True
+
+
 def _cpf_normalizado(cpf: str | None) -> str | None:
     if not cpf:
         return None
     digitos = re.sub(r"\D", "", str(cpf))
-    if len(digitos) != 11:
-        raise RegraSSTError("CPF deve conter 11 dígitos.")
+    if not _cpf_valido(digitos):
+        raise RegraSSTError("CPF inválido.")
     return f"{digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]}"
+
+
+def _hoje_bahia() -> date:
+    return datetime.now(TZ_BAHIA).date()
 
 
 def _colaborador(conn, colaborador_id: int):
@@ -77,15 +95,12 @@ def _colaborador(conn, colaborador_id: int):
 
 
 def _epi(conn, epi_id: int):
-    return conn.execute(select(EPIS).where(EPIS.c.id == int(epi_id))).mappings().first()
-
-
-def _hoje_bahia() -> date:
-    return datetime.now(ZoneInfo("America/Bahia")).date()
+    return conn.execute(
+        select(EPIS).where(EPIS.c.id == int(epi_id))
+    ).mappings().first()
 
 
 def _desativar_epis_ca_vencido(conn) -> int:
-    """Desativa EPIs cujo CA venceu, preservando todo o histórico."""
     hoje = _hoje_bahia()
     result = conn.execute(
         update(EPIS)
@@ -106,7 +121,7 @@ def cadastrar_colaborador(
     matricula: str | None = None,
     cpf: str | None = None,
     setor: str | None = None,
-    data_admissao=None,
+    data_admissao: date | None = None,
 ) -> int:
     _exigir_administracao(actor)
     nome = _texto(nome, 160, True)
@@ -114,6 +129,8 @@ def cadastrar_colaborador(
     matricula = _texto(matricula, 40)
     cpf = _cpf_normalizado(cpf)
     setor = _texto(setor, 160)
+    if data_admissao and data_admissao > _hoje_bahia():
+        raise RegraSSTError("A data de admissão não pode estar no futuro.")
     now = utcnow()
 
     try:
@@ -132,7 +149,8 @@ def cadastrar_colaborador(
             colaborador_id = int(result.inserted_primary_key[0])
             registrar_auditoria(
                 conn, actor["usuario"], "SST_COLABORADOR_CRIADO",
-                "sst_colaborador", str(colaborador_id), f"nome={nome};funcao={funcao}"
+                "sst_colaborador", str(colaborador_id),
+                f"nome={nome};funcao={funcao}"
             )
             return colaborador_id
     except IntegrityError as exc:
@@ -148,38 +166,42 @@ def listar_colaboradores(apenas_ativos: bool = True) -> list[dict]:
         return [dict(r) for r in conn.execute(stmt).mappings().all()]
 
 
-def desativar_colaborador(actor: dict, colaborador_id: int) -> None:
+def definir_status_colaborador(actor: dict, colaborador_id: int, ativo: bool) -> None:
     _exigir_administracao(actor)
     with transacao() as conn:
         row = _colaborador(conn, colaborador_id)
         if not row:
             raise RegraSSTError("Colaborador não encontrado.")
-        if not row["ativo"]:
-            raise RegraSSTError("Colaborador já está desativado.")
-        conn.execute(update(COLABORADORES).where(
-            COLABORADORES.c.id == int(colaborador_id)
-        ).values(ativo=False, atualizado_em=utcnow()))
+        if bool(row["ativo"]) == bool(ativo):
+            raise RegraSSTError("O colaborador já está com esse status.")
+        conn.execute(
+            update(COLABORADORES)
+            .where(COLABORADORES.c.id == int(colaborador_id))
+            .values(ativo=bool(ativo), atualizado_em=utcnow())
+        )
+        acao = "SST_COLABORADOR_REATIVADO" if ativo else "SST_COLABORADOR_DESATIVADO"
         registrar_auditoria(
-            conn, actor["usuario"], "SST_COLABORADOR_DESATIVADO",
-            "sst_colaborador", str(colaborador_id)
+            conn, actor["usuario"], acao, "sst_colaborador", str(colaborador_id)
         )
 
 
 def cadastrar_epi(
     actor: dict,
     nome: str,
-    ca: str | None = None,
+    ca: str,
     fabricante: str | None = None,
     unidade: str = "unidade",
     validade_ca: date | None = None,
 ) -> int:
     _exigir_administracao(actor)
     nome = _texto(nome, 180, True)
-    ca = _texto(ca, 40)
+    ca = _texto(ca, 40, True)
     fabricante = _texto(fabricante, 160)
     unidade = _texto(unidade, 40, True)
-    if validade_ca is not None and validade_ca < _hoje_bahia():
-        raise RegraSSTError("A validade do CA não pode estar vencida no momento do cadastro.")
+    if validade_ca is None:
+        raise RegraSSTError("Informe a validade do CA.")
+    if validade_ca < _hoje_bahia():
+        raise RegraSSTError("A validade do CA não pode estar vencida no cadastro.")
     now = utcnow()
 
     try:
@@ -198,7 +220,7 @@ def cadastrar_epi(
             registrar_auditoria(
                 conn, actor["usuario"], "SST_EPI_CRIADO",
                 "sst_epi", str(epi_id),
-                f"nome={nome};ca={ca or ''};validade_ca={validade_ca or ''}"
+                f"nome={nome};ca={ca};validade_ca={validade_ca}"
             )
             return epi_id
     except IntegrityError as exc:
@@ -209,10 +231,55 @@ def listar_epis(apenas_ativos: bool = True) -> list[dict]:
     stmt = select(EPIS)
     if apenas_ativos:
         stmt = stmt.where(EPIS.c.ativo == True)
-    stmt = stmt.order_by(EPIS.c.nome)
+    stmt = stmt.order_by(EPIS.c.nome, EPIS.c.ca)
     with transacao() as conn:
         _desativar_epis_ca_vencido(conn)
         return [dict(r) for r in conn.execute(stmt).mappings().all()]
+
+
+def atualizar_validade_epi(
+    actor: dict,
+    epi_id: int,
+    nova_validade: date,
+    reativar: bool = True,
+) -> None:
+    _exigir_administracao(actor)
+    if nova_validade < _hoje_bahia():
+        raise RegraSSTError("A nova validade do CA não pode estar vencida.")
+    with transacao() as conn:
+        epi = _epi(conn, epi_id)
+        if not epi:
+            raise RegraSSTError("EPI não encontrado.")
+        valores = {"validade_ca": nova_validade, "atualizado_em": utcnow()}
+        if reativar:
+            valores["ativo"] = True
+        conn.execute(
+            update(EPIS).where(EPIS.c.id == int(epi_id)).values(**valores)
+        )
+        registrar_auditoria(
+            conn, actor["usuario"], "SST_EPI_CA_ATUALIZADO",
+            "sst_epi", str(epi_id),
+            f"ca={epi['ca']};validade_antiga={epi['validade_ca']};nova_validade={nova_validade};reativado={reativar}"
+        )
+
+
+def definir_status_epi(actor: dict, epi_id: int, ativo: bool) -> None:
+    _exigir_administracao(actor)
+    with transacao() as conn:
+        epi = _epi(conn, epi_id)
+        if not epi:
+            raise RegraSSTError("EPI não encontrado.")
+        if ativo and epi["validade_ca"] and epi["validade_ca"] < _hoje_bahia():
+            raise RegraSSTError("Atualize a validade do CA antes de reativar este EPI.")
+        if bool(epi["ativo"]) == bool(ativo):
+            raise RegraSSTError("O EPI já está com esse status.")
+        conn.execute(
+            update(EPIS)
+            .where(EPIS.c.id == int(epi_id))
+            .values(ativo=bool(ativo), atualizado_em=utcnow())
+        )
+        acao = "SST_EPI_REATIVADO" if ativo else "SST_EPI_DESATIVADO"
+        registrar_auditoria(conn, actor["usuario"], acao, "sst_epi", str(epi_id))
 
 
 def registrar_entrega_epi(
@@ -225,8 +292,17 @@ def registrar_entrega_epi(
     itens = list(itens)
     if not itens:
         raise RegraSSTError("Inclua pelo menos um EPI na entrega.")
+    if len(itens) > 10:
+        raise RegraSSTError("Uma entrega pode conter no máximo 10 itens.")
     observacao = _texto(observacao, 2000)
     now = utcnow()
+
+    ids = []
+    for item in itens:
+        epi_id = int(item.get("epi_id", 0))
+        if epi_id in ids:
+            raise RegraSSTError("O mesmo EPI foi selecionado mais de uma vez.")
+        ids.append(epi_id)
 
     with transacao() as conn:
         _desativar_epis_ca_vencido(conn)
@@ -243,7 +319,9 @@ def registrar_entrega_epi(
             epi = _epi(conn, epi_id)
             if not epi or not epi["ativo"]:
                 raise RegraSSTError("Um dos EPIs está indisponível ou possui CA vencido.")
-            if epi["validade_ca"] is not None and epi["validade_ca"] < _hoje_bahia():
+            if epi["validade_ca"] is None:
+                raise RegraSSTError("Um dos EPIs não possui validade de CA informada.")
+            if epi["validade_ca"] < _hoje_bahia():
                 raise RegraSSTError("Não é permitido entregar EPI com CA vencido.")
             preparados.append((epi, quantidade))
 
@@ -257,27 +335,102 @@ def registrar_entrega_epi(
         ))
         entrega_id = int(result.inserted_primary_key[0])
 
+        itens_snapshot = []
         for epi, quantidade in preparados:
             conn.execute(insert(ITENS_ENTREGA_EPI).values(
                 entrega_id=entrega_id,
                 epi_id=int(epi["id"]),
                 quantidade=quantidade,
                 ca_no_momento=epi["ca"],
+                validade_ca_no_momento=epi["validade_ca"],
             ))
+            itens_snapshot.append({
+                "epi_id": int(epi["id"]),
+                "nome": epi["nome"],
+                "ca": epi["ca"],
+                "validade_ca": epi["validade_ca"].isoformat() if epi["validade_ca"] else None,
+                "unidade": epi["unidade"],
+                "quantidade": quantidade,
+            })
+
+        # Cada entrega gera um documento próprio para futura assinatura biométrica.
+        doc_result = conn.execute(insert(DOCUMENTOS_SST).values(
+            numero=f"TEMP-{utcnow().timestamp()}",
+            colaborador_id=int(colaborador_id),
+            tipo="Entrega de EPI",
+            motivo="Entrega",
+            titulo=f"Comprovante de Entrega de EPI #{entrega_id}",
+            conteudo_snapshot=json.dumps({
+                "entrega_id": entrega_id,
+                "colaborador": {
+                    "id": int(colaborador["id"]),
+                    "nome": colaborador["nome"],
+                    "matricula": colaborador["matricula"],
+                    "funcao": colaborador["funcao"],
+                    "setor": colaborador["setor"],
+                },
+                "itens": itens_snapshot,
+                "observacao": observacao,
+                "responsavel_usuario": actor["usuario"],
+                "entregue_em": now.isoformat(),
+            }, ensure_ascii=False, sort_keys=True),
+            hash_documento=None,
+            pdf_arquivo=None,
+            nome_arquivo=None,
+            status="Rascunho",
+            criado_por=actor["usuario"],
+            criado_em=now,
+            fechado_em=None,
+        ))
+        documento_id = int(doc_result.inserted_primary_key[0])
+        numero = f"SST-{documento_id:06d}"
+        conn.execute(
+            update(DOCUMENTOS_SST)
+            .where(DOCUMENTOS_SST.c.id == documento_id)
+            .values(numero=numero)
+        )
 
         registrar_auditoria(
             conn, actor["usuario"], "SST_EPI_ENTREGUE",
             "sst_entrega_epi", str(entrega_id),
-            f"colaborador_id={colaborador_id};itens={len(preparados)}"
+            f"colaborador_id={colaborador_id};itens={len(preparados)};documento={numero}"
         )
         return entrega_id
+
+
+def listar_entregas(limite: int = 200) -> list[dict]:
+    limite = max(1, min(int(limite), 1000))
+    stmt = (
+        select(
+            ENTREGAS_EPI.c.id.label("entrega_id"),
+            ENTREGAS_EPI.c.entregue_em,
+            ENTREGAS_EPI.c.observacao,
+            ENTREGAS_EPI.c.responsavel_usuario,
+            COLABORADORES.c.nome.label("colaborador"),
+            COLABORADORES.c.matricula.label("matricula"),
+            EPIS.c.nome.label("epi"),
+            ITENS_ENTREGA_EPI.c.ca_no_momento.label("ca"),
+            ITENS_ENTREGA_EPI.c.validade_ca_no_momento.label("validade_ca"),
+            ITENS_ENTREGA_EPI.c.quantidade,
+        )
+        .select_from(
+            ENTREGAS_EPI
+            .join(COLABORADORES, ENTREGAS_EPI.c.colaborador_id == COLABORADORES.c.id)
+            .join(ITENS_ENTREGA_EPI, ITENS_ENTREGA_EPI.c.entrega_id == ENTREGAS_EPI.c.id)
+            .join(EPIS, ITENS_ENTREGA_EPI.c.epi_id == EPIS.c.id)
+        )
+        .order_by(ENTREGAS_EPI.c.entregue_em.desc(), ITENS_ENTREGA_EPI.c.id.asc())
+        .limit(limite)
+    )
+    with transacao() as conn:
+        return [dict(r) for r in conn.execute(stmt).mappings().all()]
 
 
 def criar_documento_sst(
     actor: dict,
     colaborador_id: int,
     tipo: str,
-    motivo: str,
+    motivo: str | None,
     titulo: str,
     conteudo: dict | str,
 ) -> int:
@@ -286,7 +439,7 @@ def criar_documento_sst(
     motivo = _texto(motivo, 80)
     titulo = _texto(titulo, 220, True)
     snapshot = conteudo if isinstance(conteudo, str) else json.dumps(
-        conteudo, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        conteudo, ensure_ascii=False, sort_keys=True
     )
     if len(snapshot) > 200_000:
         raise RegraSSTError("Conteúdo do documento excede o limite permitido.")
@@ -296,8 +449,6 @@ def criar_documento_sst(
         if not colaborador or not colaborador["ativo"]:
             raise RegraSSTError("Colaborador indisponível.")
 
-        # O número usa o próximo ID da própria tabela, evitando alterar o contador
-        # das OS de manutenção.
         result = conn.execute(insert(DOCUMENTOS_SST).values(
             numero=f"TEMP-{utcnow().timestamp()}",
             colaborador_id=int(colaborador_id),
@@ -306,6 +457,8 @@ def criar_documento_sst(
             titulo=titulo,
             conteudo_snapshot=snapshot,
             hash_documento=None,
+            pdf_arquivo=None,
+            nome_arquivo=None,
             status="Rascunho",
             criado_por=actor["usuario"],
             criado_em=utcnow(),
@@ -313,9 +466,11 @@ def criar_documento_sst(
         ))
         documento_id = int(result.inserted_primary_key[0])
         numero = f"SST-{documento_id:06d}"
-        conn.execute(update(DOCUMENTOS_SST).where(
-            DOCUMENTOS_SST.c.id == documento_id
-        ).values(numero=numero))
+        conn.execute(
+            update(DOCUMENTOS_SST)
+            .where(DOCUMENTOS_SST.c.id == documento_id)
+            .values(numero=numero)
+        )
         registrar_auditoria(
             conn, actor["usuario"], "SST_DOCUMENTO_CRIADO",
             "sst_documento", numero, f"tipo={tipo};motivo={motivo or ''}"
@@ -323,33 +478,139 @@ def criar_documento_sst(
         return documento_id
 
 
-def fechar_documento_para_assinatura(actor: dict, documento_id: int, pdf_bytes: bytes) -> str:
+def obter_documento(documento_id: int) -> dict:
+    stmt = (
+        select(
+            DOCUMENTOS_SST,
+            COLABORADORES.c.nome.label("colaborador"),
+            COLABORADORES.c.matricula.label("matricula"),
+            COLABORADORES.c.funcao.label("funcao"),
+            COLABORADORES.c.setor.label("setor"),
+        )
+        .select_from(
+            DOCUMENTOS_SST.join(
+                COLABORADORES,
+                DOCUMENTOS_SST.c.colaborador_id == COLABORADORES.c.id,
+            )
+        )
+        .where(DOCUMENTOS_SST.c.id == int(documento_id))
+    )
+    with transacao() as conn:
+        row = conn.execute(stmt).mappings().first()
+        if not row:
+            raise RegraSSTError("Documento não encontrado.")
+        return dict(row)
+
+
+def fechar_documento_para_assinatura(
+    actor: dict,
+    documento_id: int,
+    pdf_bytes: bytes,
+    nome_arquivo: str,
+) -> str:
     _exigir_operacao(actor)
     if not pdf_bytes:
         raise RegraSSTError("PDF do documento não foi informado.")
+    if len(pdf_bytes) > 10_000_000:
+        raise RegraSSTError("O PDF excede o limite de 10 MB.")
+    nome_arquivo = _texto(nome_arquivo, 255, True)
     hash_documento = hashlib.sha256(pdf_bytes).hexdigest()
 
     with transacao() as conn:
-        row = conn.execute(select(DOCUMENTOS_SST).where(
-            DOCUMENTOS_SST.c.id == int(documento_id)
-        )).mappings().first()
+        row = conn.execute(
+            select(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id))
+        ).mappings().first()
         if not row:
             raise RegraSSTError("Documento não encontrado.")
         if row["status"] != "Rascunho":
             raise RegraSSTError("Somente documentos em rascunho podem ser fechados.")
 
-        conn.execute(update(DOCUMENTOS_SST).where(
-            DOCUMENTOS_SST.c.id == int(documento_id)
-        ).values(
-            hash_documento=hash_documento,
-            status="Aguardando Assinatura",
-            fechado_em=utcnow(),
-        ))
+        conn.execute(
+            update(DOCUMENTOS_SST)
+            .where(DOCUMENTOS_SST.c.id == int(documento_id))
+            .values(
+                hash_documento=hash_documento,
+                pdf_arquivo=pdf_bytes,
+                nome_arquivo=nome_arquivo,
+                status="Aguardando Assinatura",
+                fechado_em=utcnow(),
+            )
+        )
         registrar_auditoria(
             conn, actor["usuario"], "SST_DOCUMENTO_FECHADO",
             "sst_documento", row["numero"], f"sha256={hash_documento}"
         )
     return hash_documento
+
+
+def obter_pdf_documento(documento_id: int) -> tuple[bytes, str, str]:
+    with transacao() as conn:
+        row = conn.execute(
+            select(
+                DOCUMENTOS_SST.c.pdf_arquivo,
+                DOCUMENTOS_SST.c.nome_arquivo,
+                DOCUMENTOS_SST.c.hash_documento,
+            ).where(DOCUMENTOS_SST.c.id == int(documento_id))
+        ).mappings().first()
+        if not row or not row["pdf_arquivo"]:
+            raise RegraSSTError("Este documento ainda não possui PDF fechado.")
+        return bytes(row["pdf_arquivo"]), row["nome_arquivo"], row["hash_documento"]
+
+
+def listar_documentos(limite: int = 200) -> list[dict]:
+    limite = max(1, min(int(limite), 1000))
+    stmt = (
+        select(
+            DOCUMENTOS_SST.c.id,
+            DOCUMENTOS_SST.c.numero,
+            DOCUMENTOS_SST.c.tipo,
+            DOCUMENTOS_SST.c.motivo,
+            DOCUMENTOS_SST.c.titulo,
+            DOCUMENTOS_SST.c.status,
+            DOCUMENTOS_SST.c.criado_em,
+            DOCUMENTOS_SST.c.fechado_em,
+            DOCUMENTOS_SST.c.hash_documento,
+            DOCUMENTOS_SST.c.nome_arquivo,
+            COLABORADORES.c.nome.label("colaborador"),
+            COLABORADORES.c.matricula.label("matricula"),
+        )
+        .select_from(
+            DOCUMENTOS_SST.join(
+                COLABORADORES,
+                DOCUMENTOS_SST.c.colaborador_id == COLABORADORES.c.id,
+            )
+        )
+        .order_by(DOCUMENTOS_SST.c.criado_em.desc())
+        .limit(limite)
+    )
+    with transacao() as conn:
+        return [dict(r) for r in conn.execute(stmt).mappings().all()]
+
+
+def listar_pendentes_assinatura(limite: int = 200) -> list[dict]:
+    stmt = (
+        select(
+            DOCUMENTOS_SST.c.id,
+            DOCUMENTOS_SST.c.numero,
+            DOCUMENTOS_SST.c.tipo,
+            DOCUMENTOS_SST.c.titulo,
+            DOCUMENTOS_SST.c.hash_documento,
+            DOCUMENTOS_SST.c.fechado_em,
+            COLABORADORES.c.nome.label("colaborador"),
+            COLABORADORES.c.matricula.label("matricula"),
+        )
+        .select_from(
+            DOCUMENTOS_SST.join(
+                COLABORADORES,
+                DOCUMENTOS_SST.c.colaborador_id == COLABORADORES.c.id,
+            )
+        )
+        .where(DOCUMENTOS_SST.c.status == "Aguardando Assinatura")
+        .order_by(DOCUMENTOS_SST.c.fechado_em.desc())
+        .limit(max(1, min(int(limite), 1000)))
+    )
+    with transacao() as conn:
+        return [dict(r) for r in conn.execute(stmt).mappings().all()]
 
 
 def registrar_assinatura_biometrica(
@@ -360,21 +621,16 @@ def registrar_assinatura_biometrica(
     estacao: str | None = None,
     detalhes: str | None = None,
 ) -> int:
-    """Registra o RESULTADO de uma validação biométrica futura.
-
-    Esta função não captura nem compara digitais. Isso será responsabilidade do
-    componente local/SDK do leitor. Ela só deve ser chamada após o integrador
-    biométrico confirmar a identidade do colaborador.
-    """
+    """Registra apenas o resultado de uma validação feita pelo SDK biométrico."""
     _exigir_operacao(actor)
     referencia_biometrica = _texto(referencia_biometrica, 255, True)
     estacao = _texto(estacao, 160)
     detalhes = _texto(detalhes, 2000)
 
     with transacao() as conn:
-        doc = conn.execute(select(DOCUMENTOS_SST).where(
-            DOCUMENTOS_SST.c.id == int(documento_id)
-        )).mappings().first()
+        doc = conn.execute(
+            select(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id))
+        ).mappings().first()
         if not doc:
             raise RegraSSTError("Documento não encontrado.")
         if doc["status"] != "Aguardando Assinatura" or not doc["hash_documento"]:
@@ -394,75 +650,14 @@ def registrar_assinatura_biometrica(
             detalhes=detalhes,
         ))
         assinatura_id = int(result.inserted_primary_key[0])
-        conn.execute(update(DOCUMENTOS_SST).where(
-            DOCUMENTOS_SST.c.id == int(documento_id)
-        ).values(status="Assinado"))
+        conn.execute(
+            update(DOCUMENTOS_SST)
+            .where(DOCUMENTOS_SST.c.id == int(documento_id))
+            .values(status="Assinado")
+        )
         registrar_auditoria(
             conn, actor["usuario"], "SST_DOCUMENTO_ASSINADO_BIOMETRIA",
             "sst_documento", doc["numero"],
             f"assinatura_id={assinatura_id};colaborador_id={colaborador_id}"
         )
         return assinatura_id
-
-
-
-def listar_entregas(limite: int = 200) -> list[dict]:
-    """Lista os itens entregues em formato operacional enxuto."""
-    limite = max(1, min(int(limite), 1000))
-    stmt = (
-        select(
-            ENTREGAS_EPI.c.entregue_em,
-            COLABORADORES.c.nome.label("colaborador"),
-            COLABORADORES.c.matricula.label("matricula"),
-            EPIS.c.nome.label("epi"),
-            ITENS_ENTREGA_EPI.c.ca_no_momento.label("ca"),
-            ITENS_ENTREGA_EPI.c.quantidade,
-        )
-        .select_from(
-            ENTREGAS_EPI
-            .join(
-                COLABORADORES,
-                ENTREGAS_EPI.c.colaborador_id == COLABORADORES.c.id,
-            )
-            .join(
-                ITENS_ENTREGA_EPI,
-                ITENS_ENTREGA_EPI.c.entrega_id == ENTREGAS_EPI.c.id,
-            )
-            .join(
-                EPIS,
-                ITENS_ENTREGA_EPI.c.epi_id == EPIS.c.id,
-            )
-        )
-        .order_by(ENTREGAS_EPI.c.entregue_em.desc(), ITENS_ENTREGA_EPI.c.id.asc())
-        .limit(limite)
-    )
-    with transacao() as conn:
-        return [dict(r) for r in conn.execute(stmt).mappings().all()]
-
-
-def listar_documentos(limite: int = 200) -> list[dict]:
-    limite = max(1, min(int(limite), 1000))
-    stmt = (
-        select(
-            DOCUMENTOS_SST.c.id,
-            DOCUMENTOS_SST.c.numero,
-            DOCUMENTOS_SST.c.tipo,
-            DOCUMENTOS_SST.c.motivo,
-            DOCUMENTOS_SST.c.titulo,
-            DOCUMENTOS_SST.c.status,
-            DOCUMENTOS_SST.c.criado_em,
-            DOCUMENTOS_SST.c.fechado_em,
-            COLABORADORES.c.nome.label("colaborador"),
-            COLABORADORES.c.matricula.label("matricula"),
-        )
-        .select_from(
-            DOCUMENTOS_SST.join(
-                COLABORADORES,
-                DOCUMENTOS_SST.c.colaborador_id == COLABORADORES.c.id,
-            )
-        )
-        .order_by(DOCUMENTOS_SST.c.criado_em.desc())
-        .limit(limite)
-    )
-    with transacao() as conn:
-        return [dict(r) for r in conn.execute(stmt).mappings().all()]
