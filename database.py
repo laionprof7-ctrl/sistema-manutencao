@@ -182,6 +182,22 @@ def listar_chamados() -> pd.DataFrame:
     return df
 
 
+def resumo_chamados() -> dict[str, int]:
+    """Retorna somente os contadores usados no dashboard, sem carregar todas as OS."""
+    from sqlalchemy import case, func
+
+    stmt = select(
+        func.count(case((CHAMADOS.c.status == "Aguardando Aprovação", 1))).label("pendentes"),
+        func.count(case((CHAMADOS.c.status == "Em Andamento", 1))).label("andamento"),
+        func.count(case((CHAMADOS.c.status == "Concluído", 1))).label("concluidos"),
+    ).where(
+        (CHAMADOS.c.excluido == False) & (CHAMADOS.c.arquivado == False)
+    )
+    with ENGINE.connect() as conn:
+        row = conn.execute(stmt).mappings().one()
+    return {k: int(row[k] or 0) for k in ("pendentes", "andamento", "concluidos")}
+
+
 def registrar_auditoria(conn, ator: str, acao: str, entidade: str, entidade_id: str | None = None, detalhes: str | None = None) -> None:
     conn.execute(insert(AUDITORIA).values(
         criado_em=utcnow(), ator=ator, acao=acao, entidade=entidade,

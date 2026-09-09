@@ -11,7 +11,7 @@ from config import (
     PRIORIDADES, SESSION_IDLE_MINUTES, VEICULOS,
 )
 from database import (
-    inicializar_banco, listar_auditoria, listar_chamados, listar_usuarios,
+    inicializar_banco, listar_auditoria, listar_chamados, listar_usuarios, resumo_chamados,
     obter_usuario, transacao, USUARIOS, utcnow,
 )
 from permissions import pode_editar_usuario, pode_gerir_os, pode_gerir_usuarios, pode_triagem, pode_ver_oficina
@@ -23,8 +23,6 @@ from services import (
     excluir_usuario, redefinir_senha,
 )
 from sqlalchemy import update
-
-inicializar_banco()
 
 # ---------- Aparência ----------
 logo_img = None
@@ -48,10 +46,53 @@ st.markdown(
       div.stButton > button, div.stDownloadButton > button {width:100%; min-height:46px; font-weight:600; border-radius:10px;}
       div[data-testid="stMetric"] {border:1px solid #e8e8e8; padding:12px; border-radius:12px;}
       .small-muted {opacity:.72; font-size:.9rem;}
+      @media (max-width: 768px) {
+        .block-container {padding-left:.8rem; padding-right:.8rem; padding-top:.6rem;}
+        h1 {font-size:2rem !important;}
+        div.stButton > button, div.stDownloadButton > button {min-height:52px;}
+      }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# ---------- Cache / desempenho ----------
+@st.cache_resource(show_spinner=False)
+def preparar_banco():
+    # create_all faz várias consultas de metadados no PostgreSQL.
+    # Rodar uma vez por processo evita repetir isso em todo clique/rerun.
+    inicializar_banco()
+    return True
+
+
+@st.cache_data(ttl=12, show_spinner=False)
+def carregar_chamados():
+    return listar_chamados()
+
+
+@st.cache_data(ttl=12, show_spinner=False)
+def carregar_usuarios():
+    return listar_usuarios()
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def carregar_auditoria(limite: int = 500):
+    return listar_auditoria(limite)
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def carregar_resumo():
+    return resumo_chamados()
+
+
+def limpar_cache_dados():
+    carregar_chamados.clear()
+    carregar_usuarios.clear()
+    carregar_auditoria.clear()
+    carregar_resumo.clear()
+
+
+preparar_banco()
 
 # ---------- Sessão ----------
 def _init_state():
@@ -62,6 +103,7 @@ def _init_state():
         "last_activity": time.time(),
         "login_failures": 0,
         "lock_until": 0.0,
+        "user_checked_at": 0.0,
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
@@ -85,16 +127,23 @@ def renovar_atividade():
         st.session_state.last_activity = agora
 
 
-def recarregar_usuario_logado():
+def recarregar_usuario_logado(forcar: bool = False):
+    # Evita uma ida ao PostgreSQL em cada clique. Revalida periodicamente
+    # e imediatamente quando uma ação administrativa exigir isso.
+    agora = time.time()
+    if not forcar and agora - float(st.session_state.get("user_checked_at", 0.0)) < 30:
+        return
     atual = obter_usuario(st.session_state.user_info["usuario"]) if st.session_state.user_info else None
     if not atual or not bool(atual.get("ativo", True)):
         sair("Sua conta não está mais ativa.")
     st.session_state.user_info = atual
+    st.session_state.user_checked_at = agora
 
 
 def executar(acao, *args, sucesso: str | None = None, **kwargs):
     try:
         resultado = acao(*args, **kwargs)
+        limpar_cache_dados()
         if sucesso:
             st.success(sucesso)
         return True, resultado
@@ -148,6 +197,7 @@ if not st.session_state.logged_in:
                 st.session_state.login_failures = 0
                 st.session_state.lock_until = 0.0
                 st.session_state.last_activity = time.time()
+                st.session_state.user_checked_at = time.time()
                 st.rerun()
             st.session_state.login_failures += 1
             if st.session_state.login_failures >= MAX_LOGIN_ATTEMPTS:
@@ -162,22 +212,25 @@ user_data = st.session_state.user_info
 nivel_user = float(user_data["nivel"])
 usuario_atual = str(user_data["usuario"])
 
+
+def navegar(destino: str):
+    st.session_state.aba_ativa = destino
+    st.session_state.last_activity = time.time()
+
+
+def logout_callback():
+    st.session_state.logged_in = False
+    st.session_state.user_info = None
+    st.session_state.aba_ativa = "Menu"
+    st.session_state.last_activity = time.time()
+
 if logo_img:
     st.sidebar.image(logo_img, use_container_width=True)
 st.sidebar.write(f"👤 **{user_data['nome']}**")
 st.sidebar.caption(f"{NIVEIS.get(nivel_user, 'Nível')} · acesso {nivel_user:g}")
 st.sidebar.divider()
-if st.sidebar.button("🏠 Menu Principal", use_container_width=True):
-    st.session_state.aba_ativa = "Menu"
-    st.rerun()
-if st.sidebar.button("🚪 Sair", use_container_width=True):
-    sair()
-
-try:
-    df_os = listar_chamados()
-except Exception:
-    st.error("Não foi possível carregar os chamados. Verifique a conexão com o banco.")
-    st.stop()
+st.sidebar.button("🏠 Menu Principal", use_container_width=True, on_click=navegar, args=("Menu",))
+st.sidebar.button("🚪 Sair", use_container_width=True, on_click=logout_callback)
 
 aba = st.session_state.aba_ativa
 
@@ -185,31 +238,35 @@ aba = st.session_state.aba_ativa
 if aba == "Menu":
     st.title("Menu Principal")
     st.caption(f"Bem-vindo, {user_data['nome']}")
-    ativos = df_os[df_os["Arquivado"] != "Sim"] if not df_os.empty else df_os
-    pendentes = len(ativos[ativos["Status"] == "Aguardando Aprovação"]) if not ativos.empty else 0
-    andamento = len(ativos[ativos["Status"] == "Em Andamento"]) if not ativos.empty else 0
-    concluidos = len(ativos[ativos["Status"] == "Concluído"]) if not ativos.empty else 0
+    try:
+        resumo = carregar_resumo()
+    except Exception:
+        resumo = {"pendentes": 0, "andamento": 0, "concluidos": 0}
     m1, m2, m3 = st.columns(3)
-    m1.metric("Aguardando aprovação", pendentes)
-    m2.metric("Em andamento", andamento)
-    m3.metric("Concluídos", concluidos)
+    m1.metric("Aguardando aprovação", resumo["pendentes"])
+    m2.metric("Em andamento", resumo["andamento"])
+    m3.metric("Concluídos", resumo["concluidos"])
     st.write("")
     opcoes = [("📝 Abrir Chamado", "Abrir Chamado"), ("🔍 Consultar Chamados", "Consultar Chamados")]
     if pode_ver_oficina(nivel_user): opcoes.append(("🛠️ Painel da Oficina", "Oficina"))
     if pode_triagem(nivel_user): opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
     if pode_gerir_usuarios(nivel_user): opcoes.append(("👤 Gestão de Usuários", "Usuarios"))
     if pode_gerir_os(nivel_user): opcoes.append(("🧾 Auditoria", "Auditoria"))
+
+    # Navegação principal também fica no corpo da página para funcionar bem no celular,
+    # onde a barra lateral do Streamlit pode ficar recolhida/oculta.
+    opcoes.append(("🚪 Sair / Logout", "Logout"))
+
     cols = st.columns(2)
     for i, (rotulo, destino) in enumerate(opcoes):
         with cols[i % 2]:
-            if st.button(rotulo, key=f"menu_{destino}", use_container_width=True):
-                st.session_state.aba_ativa = destino
-                st.rerun()
+            if destino == "Logout":
+                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=logout_callback)
+            else:
+                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))
     st.stop()
 
-if st.button("← Voltar ao menu"):
-    st.session_state.aba_ativa = "Menu"
-    st.rerun()
+st.button("← Voltar ao menu", on_click=navegar, args=("Menu",))
 
 # ---------- Abrir chamado ----------
 if aba == "Abrir Chamado":
@@ -232,6 +289,11 @@ if aba == "Abrir Chamado":
 # ---------- Consultar ----------
 if aba == "Consultar Chamados":
     st.header("🔍 Consultar Ordens de Serviço")
+    try:
+        df_os = carregar_chamados()
+    except Exception:
+        st.error("Não foi possível carregar os chamados. Verifique a conexão com o banco.")
+        st.stop()
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1: busca = st.text_input("Buscar por placa, ID da OS ou veículo")
     with c2: exibir = st.selectbox("Exibir", ["Ativos", "Arquivados"])
@@ -264,7 +326,7 @@ if aba == "Consultar Chamados":
             arquivo = gerar_relatorio_word(df[df["Veiculo"] == escolhido], f"Veículo / Equipamento: {escolhido}")
             st.download_button("Baixar relatório Word", arquivo,
                 file_name=f"relatorio_manutencao_{escolhido.replace(' ', '_').lower()}_{datetime.now(FUSO_BR).strftime('%Y%m%d_%H%M')}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True, on_click="ignore")
 
     if pode_gerir_os(nivel_user) and not df_os.empty:
         with st.container(border=True):
@@ -289,6 +351,11 @@ if aba == "Triagem":
     if not pode_triagem(nivel_user):
         st.error("Acesso não autorizado."); st.stop()
     st.header("🎯 Triagem & Prioridades")
+    try:
+        df_os = carregar_chamados()
+    except Exception:
+        st.error("Não foi possível carregar os chamados.")
+        st.stop()
     pendentes = df_os[(df_os["Aprovado_Coordenador"] == "Não") & (df_os["Arquivado"] != "Sim")]
     if pendentes.empty:
         st.info("Nenhum chamado pendente de aprovação.")
@@ -308,6 +375,11 @@ if aba == "Oficina":
     if not pode_ver_oficina(nivel_user):
         st.error("Acesso não autorizado."); st.stop()
     st.header("🛠️ Painel da Oficina")
+    try:
+        df_os = carregar_chamados()
+    except Exception:
+        st.error("Não foi possível carregar os chamados.")
+        st.stop()
     aprovados = df_os[(df_os["Aprovado_Coordenador"] == "Sim") & (df_os["Arquivado"] != "Sim")]
     t1, t2, t3, t4 = st.tabs(["⏳ Em Aberto", "🔄 Em Andamento", "✅ Concluídos Recentes", "🔍 Histórico"])
 
@@ -367,7 +439,7 @@ if aba == "Usuarios":
             if ok: st.rerun()
     with c2:
         st.subheader("⚙️ Gerenciar Usuário")
-        usuarios = listar_usuarios()
+        usuarios = carregar_usuarios()
         if usuarios.empty:
             st.info("Nenhum usuário cadastrado.")
         else:
@@ -379,7 +451,7 @@ if aba == "Usuarios":
                 novo_nome = st.text_input("Novo nome completo", value=alvo.nome, key=f"nome_{alvo.usuario}")
                 if st.button("Salvar nome", key=f"sn_{alvo.usuario}", use_container_width=True):
                     ok, _ = executar(alterar_nome, user_data, alvo.usuario, novo_nome)
-                    if ok: recarregar_usuario_logado(); st.rerun()
+                    if ok: recarregar_usuario_logado(forcar=True); st.rerun()
             with st.expander("Alterar nível"):
                 novo_label = st.selectbox("Novo nível", list(opcoes_nivel.keys()), key=f"nivel_{alvo.usuario}")
                 permitido = alvo.usuario != usuario_atual and pode_editar_usuario(nivel_user, float(alvo.nivel))
@@ -398,7 +470,9 @@ if aba == "Usuarios":
                     ok, _ = executar(excluir_usuario, user_data, alvo.usuario)
                     if ok: st.rerun()
     st.divider()
-    tabela = listar_usuarios()[["usuario", "nome", "nivel", "ativo", "criado_em", "atualizado_em"]]
+    if "usuarios" not in locals():
+        usuarios = carregar_usuarios()
+    tabela = usuarios[["usuario", "nome", "nivel", "ativo", "criado_em", "atualizado_em"]]
     st.dataframe(tabela, use_container_width=True, hide_index=True)
     st.stop()
 
@@ -408,7 +482,7 @@ if aba == "Auditoria":
         st.error("Acesso não autorizado."); st.stop()
     st.header("🧾 Auditoria do Sistema")
     st.caption("Registro das ações administrativas e operacionais mais importantes.")
-    aud = listar_auditoria(500)
+    aud = carregar_auditoria(500)
     if aud.empty:
         st.info("Ainda não há eventos de auditoria.")
     else:
