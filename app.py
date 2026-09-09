@@ -20,7 +20,7 @@ from security import hash_senha, normalizar_usuario, verificar_senha
 from services import (
     ConcorrenciaError, RegraNegocioError, alterar_nome, alterar_nivel, aprovar_chamado,
     arquivar_chamado, atualizar_oficina, criar_chamado, criar_usuario, excluir_chamado,
-    excluir_usuario, redefinir_senha,
+    excluir_usuario, reativar_usuario, redefinir_senha,
 )
 from sqlalchemy import update
 
@@ -431,7 +431,7 @@ if aba == "Usuarios":
         with st.form("novo_usuario", clear_on_submit=True):
             nome = st.text_input("Nome completo")
             username = normalizar_usuario(st.text_input("Usuário (login)"))
-            senha = st.text_input("Senha", type="password")
+            senha = st.text_input("Senha", type="password", help="Mínimo de 8 caracteres, com maiúscula, minúscula e número.")
             nivel_label = st.selectbox("Nível de acesso", list(opcoes_nivel.keys()))
             cadastrar = st.form_submit_button("Cadastrar", use_container_width=True)
         if cadastrar:
@@ -444,36 +444,63 @@ if aba == "Usuarios":
             st.info("Nenhum usuário cadastrado.")
         else:
             ativos = usuarios[usuarios["ativo"] == True]
-            mapa = {f"{r.nome} ({r.usuario})": r for r in ativos.itertuples()}
-            alvo = mapa[st.selectbox("Selecione o usuário", list(mapa.keys()))]
-            st.write(f"**Nome:** {alvo.nome} · **Login:** `{alvo.usuario}` · **Nível:** {alvo.nivel:g}")
-            with st.expander("Alterar nome"):
-                novo_nome = st.text_input("Novo nome completo", value=alvo.nome, key=f"nome_{alvo.usuario}")
-                if st.button("Salvar nome", key=f"sn_{alvo.usuario}", use_container_width=True):
-                    ok, _ = executar(alterar_nome, user_data, alvo.usuario, novo_nome)
-                    if ok: recarregar_usuario_logado(forcar=True); st.rerun()
-            with st.expander("Alterar nível"):
-                novo_label = st.selectbox("Novo nível", list(opcoes_nivel.keys()), key=f"nivel_{alvo.usuario}")
-                permitido = alvo.usuario != usuario_atual and pode_editar_usuario(nivel_user, float(alvo.nivel))
-                if st.button("Salvar nível", key=f"sl_{alvo.usuario}", disabled=not permitido, use_container_width=True):
-                    ok, _ = executar(alterar_nivel, user_data, alvo.usuario, opcoes_nivel[novo_label])
-                    if ok: st.rerun()
-            with st.expander("Redefinir senha"):
-                nova = st.text_input("Nova senha", type="password", key=f"pwd_{alvo.usuario}")
-                pode_resetar = alvo.usuario == usuario_atual or pode_editar_usuario(nivel_user, float(alvo.nivel))
-                if st.button("Atualizar senha", key=f"sp_{alvo.usuario}", disabled=not pode_resetar, use_container_width=True):
-                    executar(redefinir_senha, user_data, alvo.usuario, nova, sucesso="Senha atualizada.")
-            with st.expander("Desativar conta"):
-                permitido = alvo.usuario != usuario_atual and pode_editar_usuario(nivel_user, float(alvo.nivel))
-                confirma = st.checkbox("Confirmo a desativação", key=f"conf_u_{alvo.usuario}")
-                if st.button("Desativar conta", key=f"du_{alvo.usuario}", disabled=not (permitido and confirma), use_container_width=True):
-                    ok, _ = executar(excluir_usuario, user_data, alvo.usuario)
-                    if ok: st.rerun()
+            if ativos.empty:
+                st.info("Nenhum usuário ativo disponível para gerenciamento.")
+            else:
+                mapa = {f"{r.nome} ({r.usuario})": r for r in ativos.itertuples()}
+                escolha = st.selectbox("Selecione o usuário", list(mapa.keys()))
+                alvo = mapa[escolha]
+                st.write(f"**Nome:** {alvo.nome} · **Login:** `{alvo.usuario}` · **Nível:** {alvo.nivel:g}")
+                with st.expander("Alterar nome"):
+                    novo_nome = st.text_input("Novo nome completo", value=alvo.nome, key=f"nome_{alvo.usuario}")
+                    if st.button("Salvar nome", key=f"sn_{alvo.usuario}", use_container_width=True):
+                        ok, _ = executar(alterar_nome, user_data, alvo.usuario, novo_nome)
+                        if ok: recarregar_usuario_logado(forcar=True); st.rerun()
+                with st.expander("Alterar nível"):
+                    novo_label = st.selectbox("Novo nível", list(opcoes_nivel.keys()), key=f"nivel_{alvo.usuario}")
+                    permitido = alvo.usuario != usuario_atual and pode_editar_usuario(nivel_user, float(alvo.nivel))
+                    if st.button("Salvar nível", key=f"sl_{alvo.usuario}", disabled=not permitido, use_container_width=True):
+                        ok, _ = executar(alterar_nivel, user_data, alvo.usuario, opcoes_nivel[novo_label])
+                        if ok: st.rerun()
+                with st.expander("Redefinir senha"):
+                    nova = st.text_input("Nova senha", type="password", key=f"pwd_{alvo.usuario}", help="Mínimo de 8 caracteres, com maiúscula, minúscula e número.")
+                    pode_resetar = alvo.usuario == usuario_atual or pode_editar_usuario(nivel_user, float(alvo.nivel))
+                    if st.button("Atualizar senha", key=f"sp_{alvo.usuario}", disabled=not pode_resetar, use_container_width=True):
+                        executar(redefinir_senha, user_data, alvo.usuario, nova, sucesso="Senha atualizada.")
+                with st.expander("Desativar conta"):
+                    permitido = alvo.usuario != usuario_atual and pode_editar_usuario(nivel_user, float(alvo.nivel))
+                    confirma = st.checkbox("Confirmo a desativação", key=f"conf_u_{alvo.usuario}")
+                    if st.button("Desativar conta", key=f"du_{alvo.usuario}", disabled=not (permitido and confirma), use_container_width=True):
+                        ok, _ = executar(excluir_usuario, user_data, alvo.usuario)
+                        if ok: st.rerun()
+
     st.divider()
     if "usuarios" not in locals():
         usuarios = carregar_usuarios()
-    tabela = usuarios[["usuario", "nome", "nivel", "ativo", "criado_em", "atualizado_em"]]
-    st.dataframe(tabela, use_container_width=True, hide_index=True)
+
+    ativos = usuarios[usuarios["ativo"] == True] if not usuarios.empty else usuarios
+    st.subheader("✅ Usuários ativos")
+    if ativos.empty:
+        st.info("Nenhum usuário ativo.")
+    else:
+        tabela_ativos = ativos[["usuario", "nome", "nivel", "criado_em", "atualizado_em"]]
+        st.dataframe(tabela_ativos, use_container_width=True, hide_index=True)
+
+    inativos = usuarios[usuarios["ativo"] == False] if not usuarios.empty else usuarios
+    with st.expander(f"⛔ Usuários desativados ({len(inativos)})", expanded=False):
+        if inativos.empty:
+            st.info("Nenhum usuário desativado.")
+        else:
+            tabela_inativos = inativos[["usuario", "nome", "nivel", "atualizado_em"]]
+            st.dataframe(tabela_inativos, use_container_width=True, hide_index=True)
+            mapa_inativos = {f"{r.nome} ({r.usuario})": r for r in inativos.itertuples()}
+            escolha_inativo = st.selectbox("Selecione uma conta para reativar", list(mapa_inativos.keys()), key="reativar_usuario_sel")
+            alvo_inativo = mapa_inativos[escolha_inativo]
+            pode_reativar = pode_editar_usuario(nivel_user, float(alvo_inativo.nivel))
+            confirma_reativacao = st.checkbox("Confirmo a reativação", key=f"conf_reativar_{alvo_inativo.usuario}")
+            if st.button("♻️ Reativar conta", key=f"reativar_{alvo_inativo.usuario}", disabled=not (pode_reativar and confirma_reativacao), use_container_width=True):
+                ok, _ = executar(reativar_usuario, user_data, alvo_inativo.usuario, sucesso="Conta reativada com sucesso.")
+                if ok: st.rerun()
     st.stop()
 
 # ---------- Auditoria ----------

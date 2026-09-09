@@ -96,6 +96,19 @@ def excluir_usuario(actor: dict, alvo: str) -> None:
         registrar_auditoria(conn, actor["usuario"], "USUARIO_DESATIVADO", "usuario", alvo)
 
 
+def reativar_usuario(actor: dict, alvo: str) -> None:
+    with transacao() as conn:
+        row = _usuario(conn, alvo)
+        if not row:
+            raise RegraNegocioError("Usuário não encontrado.")
+        if bool(row["ativo"]):
+            raise RegraNegocioError("Essa conta já está ativa.")
+        if not pode_editar_usuario(float(actor["nivel"]), float(row["nivel"])):
+            raise RegraNegocioError("Sem permissão para reativar esse usuário.")
+        conn.execute(update(USUARIOS).where(USUARIOS.c.usuario == alvo).values(ativo=True, atualizado_em=utcnow()))
+        registrar_auditoria(conn, actor["usuario"], "USUARIO_REATIVADO", "usuario", alvo)
+
+
 def criar_chamado(actor: dict, veiculo: str, placa: str, descricao: str) -> str:
     veiculo, placa, descricao = veiculo.strip(), placa.strip().upper(), descricao.strip()
     if not veiculo or not placa or len(descricao) < 5:

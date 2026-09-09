@@ -41,8 +41,8 @@ def verificar_senha(senha: str, armazenada: str) -> tuple[bool, bool]:
 
 
 def validar_senha_forte(senha: str) -> tuple[bool, str]:
-    if len(senha) < 10:
-        return False, "A senha deve ter pelo menos 10 caracteres."
+    if len(senha) < 8:
+        return False, "A senha deve ter pelo menos 8 caracteres."
     if len(senha) > 128:
         return False, "A senha é longa demais."
     if not re.search(r"[A-Z]", senha):
