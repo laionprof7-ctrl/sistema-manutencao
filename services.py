@@ -170,12 +170,26 @@ def atualizar_oficina(actor: dict, id_interno: int, novo_status: str, mecanico: 
         row = _chamado(conn, id_interno)
         if not row or row["arquivado"] or not row["aprovado_coordenador"]:
             raise RegraNegocioError("Chamado indisponível para a oficina.")
+        ordem_status = {
+            "Aguardando Manutenção": 1,
+            "Em Andamento": 2,
+            "Concluído": 3,
+        }
+        status_atual = row["status"]
+        if status_atual not in ordem_status:
+            raise RegraNegocioError("Status atual inválido para a oficina.")
+
+        retrocesso = ordem_status[novo_status] < ordem_status[status_atual]
+        if retrocesso and not pode_gerir_os(float(actor["nivel"])):
+            raise RegraNegocioError("O progresso da OS só pode avançar. Apenas o Administrador Global pode corrigir ou reabrir uma OS.")
+
         atual = (row["mecanico_responsavel"] or "").strip()
         informado = (mecanico or "").strip()
         if atual:
             informado = atual
         elif len(informado) < 3:
             raise RegraNegocioError("Informe o mecânico responsável.")
+
         liberacao = row["data_liberacao"]
         if novo_status == "Concluído" and liberacao is None:
             liberacao = utcnow()
@@ -189,7 +203,9 @@ def atualizar_oficina(actor: dict, id_interno: int, novo_status: str, mecanico: 
         ))
         if result.rowcount != 1:
             raise ConcorrenciaError("Esse chamado foi alterado por outra pessoa. Atualize a tela.")
-        registrar_auditoria(conn, actor["usuario"], "OS_OFICINA_ATUALIZADA", "chamado", row["id_os"], f"status={novo_status};mecanico={informado}")
+        acao = "OS_STATUS_CORRIGIDO_ADMIN" if retrocesso else "OS_OFICINA_ATUALIZADA"
+        detalhes = f"status_anterior={status_atual};status_novo={novo_status};mecanico={informado}"
+        registrar_auditoria(conn, actor["usuario"], acao, "chamado", row["id_os"], detalhes)
 
 
 def arquivar_chamado(actor: dict, id_interno: int, arquivar: bool, versao: int) -> None:
