@@ -8,6 +8,7 @@ import streamlit as st
 
 from sst_database import inicializar_banco_sst
 from sst_reports import gerar_pdf_documento
+from sst_ui import aplicar_estilo_sst, mostrar_notificacao, renderizar_cabecalho_modulo, renderizar_card_texto
 from sst_services import (
     atualizar_validade_epi,
     cadastrar_colaborador,
@@ -431,18 +432,85 @@ def _render_assinaturas() -> None:
         st.info("Nenhum documento aguardando assinatura.")
 
 
+
+def _render_dashboard(actor: dict) -> None:
+    st.subheader("Visão geral")
+    st.caption("Resumo operacional do módulo SST/EPI.")
+
+    ok_c, colaboradores = _executar(listar_colaboradores, apenas_ativos=False)
+    ok_e, epis = _executar(listar_epis, apenas_ativos=False)
+    ok_ent, entregas = _executar(listar_entregas)
+    ok_doc, documentos = _executar(listar_documentos)
+    ok_ass, pendentes = _executar(listar_pendentes_assinatura)
+    if not all((ok_c, ok_e, ok_ent, ok_doc, ok_ass)):
+        return
+
+    hoje = datetime.now(TZ_BAHIA).date()
+    ativos = sum(1 for r in colaboradores if r.get("ativo"))
+    epis_ativos = sum(1 for r in epis if r.get("ativo"))
+    ca_proximos = sum(
+        1 for r in epis
+        if r.get("ativo") and r.get("validade_ca") and 0 <= (r["validade_ca"] - hoje).days <= 30
+    )
+    limite = datetime.now(TZ_BAHIA) - timedelta(days=30)
+    entregas_30 = 0
+    for r in entregas:
+        data = r.get("entregue_em")
+        if data:
+            try:
+                if data.astimezone(TZ_BAHIA) >= limite:
+                    entregas_30 += 1
+            except Exception:
+                pass
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Colaboradores ativos", ativos)
+    m2.metric("EPIs ativos", epis_ativos)
+    m3.metric("CA vencendo em 30 dias", ca_proximos)
+    m4.metric("Entregas em 30 dias", entregas_30)
+    m5.metric("Aguardando assinatura", len(pendentes))
+
+    st.write("")
+    c1, c2 = st.columns(2)
+    with c1:
+        renderizar_card_texto(
+            "Controle de EPI",
+            "O CA é validado para novas entregas e o histórico preserva o CA e a validade existentes no momento da entrega.",
+        )
+    with c2:
+        renderizar_card_texto(
+            "Documentos e assinatura",
+            "Documentos fechados preservam o PDF exato e o hash SHA-256, preparando o fluxo para integração biométrica real.",
+        )
+
+    st.markdown("#### Situação dos documentos")
+    if documentos:
+        contagem = {}
+        for r in documentos:
+            status = r.get("status") or "Sem status"
+            contagem[status] = contagem.get(status, 0) + 1
+        st.dataframe(
+            [{"Status": k, "Quantidade": v} for k, v in sorted(contagem.items())],
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Nenhum documento SST criado ainda.")
+
 def renderizar_modulo_sst(actor: dict) -> None:
+    aplicar_estilo_sst()
     inicializar_banco_sst()
 
     if mensagem := st.session_state.pop("sst_mensagem", None):
-        st.success(mensagem)
+        mostrar_notificacao(mensagem)
 
-    st.title("🦺 SST / EPI")
-    st.caption("Gestão de colaboradores, EPIs, entregas, documentos e preparação para assinatura biométrica.")
+    renderizar_cabecalho_modulo()
+    st.write("")
 
     opcoes = {
+        "📊 Visão geral": _render_dashboard,
         "👷 Colaboradores": _render_colaboradores,
-        "🦺 EPIs": _render_epis,
+        "⛑️ EPIs": _render_epis,
         "📦 Entrega de EPI": _render_entregas,
         "📄 Documentos / OS de SST": _render_documentos,
         "✍️ Assinaturas": lambda _actor: _render_assinaturas(),
