@@ -141,27 +141,35 @@ def _render_colaboradores(actor: dict) -> None:
     st.subheader("Colaboradores")
 
     with st.expander("➕ Cadastrar colaborador"):
-        # O checkbox fica fora do form para que o Streamlit faça rerun imediatamente
-        # e habilite/desabilite o calendário sem exigir envio do formulário.
-        c1, c2 = st.columns(2)
-        informar_admissao = c2.checkbox(
+        # Sem st.form aqui: assim o checkbox reage imediatamente e permanece
+        # exatamente ao lado do campo de admissão.
+        f1, f2 = st.columns(2)
+
+        nome = f1.text_input("Nome completo", key="sst_cad_nome")
+        matricula = f2.text_input("Matrícula", key="sst_cad_matricula")
+
+        cpf = f1.text_input("CPF", key="sst_cad_cpf")
+        funcao = f2.text_input("Função", key="sst_cad_funcao")
+
+        setor = f1.text_input("Setor", key="sst_cad_setor")
+
+        informar_admissao = f2.checkbox(
             "Informar data de admissão",
             key="sst_informar_data_admissao",
         )
+        data_admissao = f2.date_input(
+            "Data de admissão",
+            format="DD/MM/YYYY",
+            disabled=not informar_admissao,
+            key="sst_cad_data_admissao",
+        )
 
-        with st.form("sst_form_colaborador"):
-            f1, f2 = st.columns(2)
-            nome = f1.text_input("Nome completo")
-            matricula = f2.text_input("Matrícula")
-            cpf = f1.text_input("CPF")
-            funcao = f2.text_input("Função")
-            setor = f1.text_input("Setor")
-            data_admissao = f2.date_input(
-                "Data de admissão",
-                format="DD/MM/YYYY",
-                disabled=not informar_admissao,
-            )
-            enviado = st.form_submit_button("Cadastrar colaborador", use_container_width=True)
+        enviado = st.button(
+            "Cadastrar colaborador",
+            key="sst_btn_cadastrar_colaborador",
+            use_container_width=True,
+        )
+
         if enviado:
             dados = {
                 "nome": nome, "cpf": cpf, "matricula": matricula, "funcao": funcao,
