@@ -278,7 +278,7 @@ def renderizar_topo_portal() -> None:
 
 
 def renderizar_portal_inicial() -> None:
-    st.markdown("<div class='sst-portal-shell'>", unsafe_allow_html=True)
+    """Tela inicial do portal, usando componentes nativos para evitar HTML exibido como código."""
     st.markdown(
         f"""
         <div class="sst-portal-card">
@@ -293,27 +293,22 @@ def renderizar_portal_inicial() -> None:
                     </div>
                 </div>
             </div>
-
-            <div class="sst-feature-strip">
-                <div class="sst-feature">
-                    <div class="sst-feature-label">Módulo</div>
-                    <div class="sst-feature-value">SST / EPI</div>
-                </div>
-                <div class="sst-feature">
-                    <div class="sst-feature-label">Ambiente</div>
-                    <div class="sst-feature-value"><span class="sst-status-dot"></span>Desenvolvimento</div>
-                </div>
-                <div class="sst-feature">
-                    <div class="sst-feature-label">Rastreabilidade</div>
-                    <div class="sst-feature-value"><span class="sst-status-dot"></span>Ativa</div>
-                </div>
-            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Módulo", "SST / EPI")
+    with col2:
+        st.metric("Ambiente", "Desenvolvimento")
+    with col3:
+        st.metric("Rastreabilidade", "Ativa")
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
 def renderizar_cabecalho_modulo() -> None:
     esquerda, direita = st.columns([5, 1.3], vertical_alignment="center")
