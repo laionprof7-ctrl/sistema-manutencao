@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Iterable
 from zoneinfo import ZoneInfo
@@ -10,7 +14,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from database import registrar_auditoria, transacao, utcnow
+from database import ENGINE, registrar_auditoria, transacao, utcnow
 from sst_database import (
     ASSINATURAS_SST,
     COLABORADORES,
@@ -26,6 +30,91 @@ from sst_database import (
 TZ_BAHIA = ZoneInfo("America/Bahia")
 MOTIVOS_ENTREGA = ("Primeira entrega", "Desgaste do equipamento anterior", "Perda")
 MOTIVOS_OS = ("Admissão", "Mudança de função", "Serviço eventual")
+
+STORAGE_BUCKET_SST = "documentos-sst"
+STORAGE_LIMITE_BYTES = 10 * 1024 * 1024
+
+
+def _segredo_storage(nome: str) -> str:
+    valor = os.getenv(nome)
+    if valor:
+        return valor.strip()
+    try:
+        import streamlit as st
+        valor = st.secrets.get(nome)
+        if valor:
+            return str(valor).strip()
+    except Exception:
+        pass
+    raise RegraSSTError(f"Configuração {nome} não encontrada nos Secrets do aplicativo.")
+
+
+def _storage_config() -> tuple[str, str]:
+    url = _segredo_storage("SUPABASE_URL").rstrip("/")
+    chave = _segredo_storage("SUPABASE_SECRET_KEY")
+    if not url.startswith("https://"):
+        raise RegraSSTError("SUPABASE_URL inválida nos Secrets do aplicativo.")
+    return url, chave
+
+
+def _storage_path(numero: str, tipo: str, nome_arquivo: str) -> str:
+    partes = str(numero).split("-")
+    ano = partes[1] if len(partes) >= 3 and partes[1].isdigit() else str(_hoje_bahia().year)
+    if tipo == "Entrega de EPI":
+        pasta = "entregas-epi"
+    elif tipo == "Ordem de Serviço de SST":
+        pasta = "ordens-servico"
+    else:
+        pasta = "outros"
+    nome_seguro = re.sub(r"[^0-9A-Za-zÀ-ÿ_.-]+", "_", str(nome_arquivo)).strip("._") or f"{numero}.pdf"
+    return f"{ano}/{pasta}/{nome_seguro}"
+
+
+def _storage_requisicao(metodo: str, path: str, dados: bytes | None = None) -> bytes:
+    url_base, chave = _storage_config()
+    caminho = quote(path, safe="/")
+    url = f"{url_base}/storage/v1/object/{STORAGE_BUCKET_SST}/{caminho}"
+    headers = {"apikey": chave, "User-Agent": "Copa-SST-Backend/1.0"}
+    if dados is not None:
+        headers["Content-Type"] = "application/pdf"
+        headers["x-upsert"] = "false"
+    req = Request(url, data=dados, headers=headers, method=metodo)
+    try:
+        with urlopen(req, timeout=30) as resp:
+            return resp.read()
+    except HTTPError as exc:
+        try:
+            detalhe = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            detalhe = ""
+        raise RegraSSTError(f"Falha no Storage do SST (HTTP {exc.code}). {detalhe[:300]}") from exc
+    except URLError as exc:
+        raise RegraSSTError("Não foi possível conectar ao Storage do SST.") from exc
+
+
+def _storage_enviar(path: str, pdf_bytes: bytes) -> None:
+    if not pdf_bytes:
+        raise RegraSSTError("PDF do documento não foi informado.")
+    if len(pdf_bytes) > STORAGE_LIMITE_BYTES:
+        raise RegraSSTError("O PDF excede o limite de 10 MB.")
+    _storage_requisicao("POST", path, pdf_bytes)
+
+
+def _storage_baixar(path: str) -> bytes:
+    return _storage_requisicao("GET", path)
+
+
+def _storage_excluir(path: str) -> None:
+    try:
+        _storage_requisicao("DELETE", path)
+    except Exception:
+        pass
+
+
+def _usar_storage_sst() -> bool:
+    # Em produção (PostgreSQL/Supabase), PDFs novos ficam no Storage.
+    # SQLite continua suportado para testes locais sem exigir credenciais externas.
+    return ENGINE.dialect.name == "postgresql"
 
 
 class RegraSSTError(ValueError):
@@ -502,24 +591,81 @@ def obter_documento(documento_id: int) -> dict:
 
 def fechar_documento_para_assinatura(actor: dict, documento_id: int, pdf_bytes: bytes, nome_arquivo: str) -> str:
     _exigir_operacao(actor)
-    if not pdf_bytes: raise RegraSSTError("PDF do documento não foi informado.")
-    if len(pdf_bytes) > 10_000_000: raise RegraSSTError("O PDF excede o limite de 10 MB.")
+    if not pdf_bytes:
+        raise RegraSSTError("PDF do documento não foi informado.")
+    if len(pdf_bytes) > STORAGE_LIMITE_BYTES:
+        raise RegraSSTError("O PDF excede o limite de 10 MB.")
     nome_arquivo = _texto(nome_arquivo, 255, True)
     hash_documento = hashlib.sha256(pdf_bytes).hexdigest()
+
     with transacao() as conn:
         row = conn.execute(select(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id))).mappings().first()
-        if not row: raise RegraSSTError("Documento não encontrado.")
-        if row["status"] != "Rascunho": raise RegraSSTError("Somente documentos em rascunho podem ser fechados.")
-        conn.execute(update(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id)).values(hash_documento=hash_documento, pdf_arquivo=pdf_bytes, nome_arquivo=nome_arquivo, status="Aguardando Assinatura", fechado_em=utcnow()))
-        registrar_auditoria(conn, actor["usuario"], "SST_DOCUMENTO_FECHADO", "sst_documento", row["numero"], f"sha256={hash_documento}")
+        if not row:
+            raise RegraSSTError("Documento não encontrado.")
+        if row["status"] != "Rascunho":
+            raise RegraSSTError("Somente documentos em rascunho podem ser fechados.")
+        numero = row["numero"]
+        tipo = row["tipo"]
+
+    storage_path = None
+    if _usar_storage_sst():
+        storage_path = _storage_path(numero, tipo, nome_arquivo)
+        _storage_enviar(storage_path, pdf_bytes)
+
+    try:
+        with transacao() as conn:
+            row = conn.execute(select(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id))).mappings().first()
+            if not row:
+                raise RegraSSTError("Documento não encontrado.")
+            if row["status"] != "Rascunho":
+                raise RegraSSTError("Somente documentos em rascunho podem ser fechados.")
+            valores = {
+                "hash_documento": hash_documento,
+                "nome_arquivo": nome_arquivo,
+                "status": "Aguardando Assinatura",
+                "fechado_em": utcnow(),
+            }
+            if storage_path:
+                valores["storage_path"] = storage_path
+                valores["pdf_arquivo"] = None
+            else:
+                valores["pdf_arquivo"] = pdf_bytes
+            conn.execute(update(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id)).values(**valores))
+            registrar_auditoria(
+                conn, actor["usuario"], "SST_DOCUMENTO_FECHADO", "sst_documento", row["numero"],
+                f"sha256={hash_documento};storage={'sim' if storage_path else 'nao'}"
+            )
+    except Exception:
+        if storage_path:
+            _storage_excluir(storage_path)
+        raise
     return hash_documento
 
 
 def obter_pdf_documento(documento_id: int) -> tuple[bytes, str, str]:
     with transacao() as conn:
-        row = conn.execute(select(DOCUMENTOS_SST.c.pdf_arquivo, DOCUMENTOS_SST.c.nome_arquivo, DOCUMENTOS_SST.c.hash_documento).where(DOCUMENTOS_SST.c.id == int(documento_id))).mappings().first()
-        if not row or not row["pdf_arquivo"]: raise RegraSSTError("Este documento ainda não possui PDF fechado.")
-        return bytes(row["pdf_arquivo"]), row["nome_arquivo"], row["hash_documento"]
+        row = conn.execute(
+            select(
+                DOCUMENTOS_SST.c.pdf_arquivo, DOCUMENTOS_SST.c.storage_path,
+                DOCUMENTOS_SST.c.nome_arquivo, DOCUMENTOS_SST.c.hash_documento
+            ).where(DOCUMENTOS_SST.c.id == int(documento_id))
+        ).mappings().first()
+    if not row:
+        raise RegraSSTError("Documento não encontrado.")
+
+    if row.get("storage_path"):
+        pdf = _storage_baixar(row["storage_path"])
+    elif row.get("pdf_arquivo"):
+        # Compatibilidade: documentos antigos continuam sendo lidos do PostgreSQL.
+        pdf = bytes(row["pdf_arquivo"])
+    else:
+        raise RegraSSTError("Este documento ainda não possui PDF fechado.")
+
+    hash_atual = hashlib.sha256(pdf).hexdigest()
+    hash_esperado = row.get("hash_documento")
+    if hash_esperado and hash_atual != hash_esperado:
+        raise RegraSSTError("A integridade do PDF não confere com o hash registrado.")
+    return pdf, row["nome_arquivo"], hash_esperado or hash_atual
 
 
 def _limites_periodo(data_inicio: date | None, data_fim: date | None):
@@ -538,7 +684,7 @@ def listar_documentos(limite: int = 100, colaborador_id: int | None = None, tipo
     stmt = select(
         DOCUMENTOS_SST.c.id, DOCUMENTOS_SST.c.numero, DOCUMENTOS_SST.c.tipo, DOCUMENTOS_SST.c.motivo,
         DOCUMENTOS_SST.c.titulo, DOCUMENTOS_SST.c.status, DOCUMENTOS_SST.c.criado_em, DOCUMENTOS_SST.c.fechado_em,
-        DOCUMENTOS_SST.c.hash_documento, DOCUMENTOS_SST.c.nome_arquivo, DOCUMENTOS_SST.c.entrega_id,
+        DOCUMENTOS_SST.c.hash_documento, DOCUMENTOS_SST.c.storage_path, DOCUMENTOS_SST.c.nome_arquivo, DOCUMENTOS_SST.c.entrega_id,
         COLABORADORES.c.nome.label("colaborador"), COLABORADORES.c.matricula.label("matricula"),
     ).select_from(DOCUMENTOS_SST.join(COLABORADORES, DOCUMENTOS_SST.c.colaborador_id == COLABORADORES.c.id))
     cond = []
@@ -551,7 +697,13 @@ def listar_documentos(limite: int = 100, colaborador_id: int | None = None, tipo
     busca = _texto(busca, 120)
     if busca:
         termo = f"%{busca}%"
-        cond.append(or_(DOCUMENTOS_SST.c.numero.ilike(termo), DOCUMENTOS_SST.c.titulo.ilike(termo), COLABORADORES.c.nome.ilike(termo)))
+        cond.append(or_(
+            DOCUMENTOS_SST.c.numero.ilike(termo),
+            DOCUMENTOS_SST.c.titulo.ilike(termo),
+            DOCUMENTOS_SST.c.motivo.ilike(termo),
+            COLABORADORES.c.nome.ilike(termo),
+            COLABORADORES.c.matricula.ilike(termo),
+        ))
     if cond: stmt = stmt.where(and_(*cond))
     stmt = stmt.order_by(DOCUMENTOS_SST.c.criado_em.desc()).limit(limite)
     with transacao() as conn:
@@ -582,64 +734,82 @@ def registrar_entrega_epi(actor: dict, colaborador_id: int, itens: Iterable[dict
         if epi_id in ids: raise RegraSSTError("O mesmo EPI foi selecionado mais de uma vez.")
         ids.append(epi_id)
     now = utcnow()
+    storage_path_criado = None
 
-    with transacao() as conn:
-        _desativar_epis_ca_vencido(conn)
-        colaborador = _colaborador(conn, colaborador_id)
-        if not colaborador or not colaborador["ativo"]: raise RegraSSTError("Colaborador indisponível para entrega.")
-        ghe = _ghe(conn, int(colaborador["ghe_id"])) if colaborador.get("ghe_id") else None
-        preparados = []
-        for item in itens:
-            epi_id = int(item.get("epi_id", 0)); quantidade = int(item.get("quantidade", 0))
-            if quantidade <= 0 or quantidade > 1000: raise RegraSSTError("Quantidade de EPI inválida.")
-            epi = _epi(conn, epi_id)
-            if not epi or not epi["ativo"]: raise RegraSSTError("Um dos EPIs está indisponível ou possui CA vencido.")
-            if epi["validade_ca"] is None: raise RegraSSTError("Um dos EPIs não possui validade de CA informada.")
-            if epi["validade_ca"] < _hoje_bahia(): raise RegraSSTError("Não é permitido entregar EPI com CA vencido.")
-            preparados.append((dict(epi), quantidade))
+    try:
+        with transacao() as conn:
+            _desativar_epis_ca_vencido(conn)
+            colaborador = _colaborador(conn, colaborador_id)
+            if not colaborador or not colaborador["ativo"]: raise RegraSSTError("Colaborador indisponível para entrega.")
+            ghe = _ghe(conn, int(colaborador["ghe_id"])) if colaborador.get("ghe_id") else None
+            preparados = []
+            for item in itens:
+                epi_id = int(item.get("epi_id", 0)); quantidade = int(item.get("quantidade", 0))
+                if quantidade <= 0 or quantidade > 1000: raise RegraSSTError("Quantidade de EPI inválida.")
+                epi = _epi(conn, epi_id)
+                if not epi or not epi["ativo"]: raise RegraSSTError("Um dos EPIs está indisponível ou possui CA vencido.")
+                if epi["validade_ca"] is None: raise RegraSSTError("Um dos EPIs não possui validade de CA informada.")
+                if epi["validade_ca"] < _hoje_bahia(): raise RegraSSTError("Não é permitido entregar EPI com CA vencido.")
+                preparados.append((dict(epi), quantidade))
 
-        result = conn.execute(insert(ENTREGAS_EPI).values(colaborador_id=int(colaborador_id), responsavel_usuario=actor["usuario"], entregue_em=now, motivo_entrega=motivo_entrega, observacao=None, status="Registrada", criado_em=now))
-        entrega_id = int(result.inserted_primary_key[0])
-        itens_snapshot = []
-        for epi, quantidade in preparados:
-            conn.execute(insert(ITENS_ENTREGA_EPI).values(entrega_id=entrega_id, epi_id=int(epi["id"]), quantidade=quantidade, ca_no_momento=epi["ca"], validade_ca_no_momento=epi["validade_ca"]))
-            itens_snapshot.append({"epi_id": int(epi["id"]), "nome": epi["nome"], "ca": epi["ca"], "validade_ca": epi["validade_ca"].isoformat(), "unidade": epi["unidade"], "quantidade": quantidade})
+            result = conn.execute(insert(ENTREGAS_EPI).values(colaborador_id=int(colaborador_id), responsavel_usuario=actor["usuario"], entregue_em=now, motivo_entrega=motivo_entrega, observacao=None, status="Registrada", criado_em=now))
+            entrega_id = int(result.inserted_primary_key[0])
+            itens_snapshot = []
+            for epi, quantidade in preparados:
+                conn.execute(insert(ITENS_ENTREGA_EPI).values(entrega_id=entrega_id, epi_id=int(epi["id"]), quantidade=quantidade, ca_no_momento=epi["ca"], validade_ca_no_momento=epi["validade_ca"]))
+                itens_snapshot.append({"epi_id": int(epi["id"]), "nome": epi["nome"], "ca": epi["ca"], "validade_ca": epi["validade_ca"].isoformat(), "unidade": epi["unidade"], "quantidade": quantidade})
 
-        numero = _novo_numero_documento(conn, now)
-        snapshot_obj = {
-            "modelo": "entrega_epi", "entrega_id": entrega_id,
-            "colaborador": _snapshot_colaborador(dict(colaborador), dict(ghe) if ghe else None),
-            "itens": itens_snapshot, "motivo_entrega": motivo_entrega,
-            "responsavel_usuario": actor["usuario"], "entregue_em": now.isoformat(),
-        }
-        snapshot_json = json.dumps(snapshot_obj, ensure_ascii=False, sort_keys=True)
-        titulo = f"Comprovante de Entrega de EPI #{entrega_id}"
-        doc_result = conn.execute(insert(DOCUMENTOS_SST).values(
-            numero=numero, colaborador_id=int(colaborador_id), entrega_id=entrega_id, tipo="Entrega de EPI", motivo=motivo_entrega,
-            titulo=titulo, conteudo_snapshot=snapshot_json, hash_documento=None, pdf_arquivo=None, nome_arquivo=None,
-            status="Rascunho", criado_por=actor["usuario"], criado_em=now, fechado_em=None,
-        ))
-        documento_id = int(doc_result.inserted_primary_key[0])
+            numero = _novo_numero_documento(conn, now)
+            snapshot_obj = {
+                "modelo": "entrega_epi", "entrega_id": entrega_id,
+                "colaborador": _snapshot_colaborador(dict(colaborador), dict(ghe) if ghe else None),
+                "itens": itens_snapshot, "motivo_entrega": motivo_entrega,
+                "responsavel_usuario": actor["usuario"], "entregue_em": now.isoformat(),
+            }
+            snapshot_json = json.dumps(snapshot_obj, ensure_ascii=False, sort_keys=True)
+            titulo = f"Comprovante de Entrega de EPI #{entrega_id}"
+            doc_result = conn.execute(insert(DOCUMENTOS_SST).values(
+                numero=numero, colaborador_id=int(colaborador_id), entrega_id=entrega_id, tipo="Entrega de EPI", motivo=motivo_entrega,
+                titulo=titulo, conteudo_snapshot=snapshot_json, hash_documento=None, pdf_arquivo=None, storage_path=None, nome_arquivo=None,
+                status="Rascunho", criado_por=actor["usuario"], criado_em=now, fechado_em=None,
+            ))
+            documento_id = int(doc_result.inserted_primary_key[0])
 
-        # Gera e fecha automaticamente o comprovante da entrega, sem etapa manual.
-        from sst_reports import gerar_pdf_documento
-        documento_pdf = {
-            "id": documento_id, "numero": numero, "tipo": "Entrega de EPI", "motivo": motivo_entrega, "titulo": titulo,
-            "conteudo_snapshot": snapshot_json, "criado_em": now,
-            "colaborador": colaborador["nome"], "matricula": colaborador.get("matricula"), "cpf": colaborador.get("cpf"),
-            "funcao": colaborador.get("funcao"), "setor": colaborador.get("setor"), "data_admissao": colaborador.get("data_admissao"),
-            "ghe_codigo": ghe.get("codigo") if ghe else None, "ghe_nome": ghe.get("nome") if ghe else None,
-        }
-        pdf = gerar_pdf_documento(documento_pdf)
-        hash_documento = hashlib.sha256(pdf).hexdigest()
-        nome_arquivo = _nome_pdf(numero, "Entrega_de_EPI")
-        conn.execute(update(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == documento_id).values(
-            hash_documento=hash_documento, pdf_arquivo=pdf, nome_arquivo=nome_arquivo,
-            status="Aguardando Assinatura", fechado_em=utcnow(),
-        ))
-        registrar_auditoria(conn, actor["usuario"], "SST_EPI_ENTREGUE", "sst_entrega_epi", str(entrega_id), f"colaborador_id={colaborador_id};itens={len(preparados)};motivo={motivo_entrega};documento={numero}")
-        registrar_auditoria(conn, actor["usuario"], "SST_DOCUMENTO_FECHADO", "sst_documento", numero, f"sha256={hash_documento};geracao=automatica_entrega_epi")
-        return entrega_id
+            # Gera e fecha automaticamente o comprovante da entrega, sem etapa manual.
+            from sst_reports import gerar_pdf_documento
+            documento_pdf = {
+                "id": documento_id, "numero": numero, "tipo": "Entrega de EPI", "motivo": motivo_entrega, "titulo": titulo,
+                "conteudo_snapshot": snapshot_json, "criado_em": now,
+                "colaborador": colaborador["nome"], "matricula": colaborador.get("matricula"), "cpf": colaborador.get("cpf"),
+                "funcao": colaborador.get("funcao"), "setor": colaborador.get("setor"), "data_admissao": colaborador.get("data_admissao"),
+                "ghe_codigo": ghe.get("codigo") if ghe else None, "ghe_nome": ghe.get("nome") if ghe else None,
+            }
+            pdf = gerar_pdf_documento(documento_pdf)
+            if len(pdf) > STORAGE_LIMITE_BYTES:
+                raise RegraSSTError("O PDF excede o limite de 10 MB.")
+            hash_documento = hashlib.sha256(pdf).hexdigest()
+            nome_arquivo = _nome_pdf(numero, "Entrega_de_EPI")
+
+            valores_pdf = {
+                "hash_documento": hash_documento, "nome_arquivo": nome_arquivo,
+                "status": "Aguardando Assinatura", "fechado_em": utcnow(),
+            }
+            if _usar_storage_sst():
+                storage_path_criado = _storage_path(numero, "Entrega de EPI", nome_arquivo)
+                _storage_enviar(storage_path_criado, pdf)
+                valores_pdf["storage_path"] = storage_path_criado
+                valores_pdf["pdf_arquivo"] = None
+            else:
+                valores_pdf["pdf_arquivo"] = pdf
+
+            conn.execute(update(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == documento_id).values(**valores_pdf))
+            registrar_auditoria(conn, actor["usuario"], "SST_EPI_ENTREGUE", "sst_entrega_epi", str(entrega_id), f"colaborador_id={colaborador_id};itens={len(preparados)};motivo={motivo_entrega};documento={numero}")
+            registrar_auditoria(conn, actor["usuario"], "SST_DOCUMENTO_FECHADO", "sst_documento", numero, f"sha256={hash_documento};geracao=automatica_entrega_epi;storage={'sim' if storage_path_criado else 'nao'}")
+            return entrega_id
+    except Exception:
+        if storage_path_criado:
+            _storage_excluir(storage_path_criado)
+        raise
 
 
 def listar_entregas(limite: int = 100) -> list[dict]:
