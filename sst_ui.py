@@ -231,50 +231,6 @@ def aplicar_estilo_sst() -> None:
             .sst-hero-title { font-size: 2.15rem; }
             .sst-hardhat { width: 66px; height: 66px; flex-basis: 66px; }
         }
-
-        /* Navegação interna limpa */
-        div[role="radiogroup"] {
-            gap: 0.35rem !important;
-            flex-wrap: wrap !important;
-            padding: 0.35rem 0 0.65rem 0;
-        }
-
-        div[role="radiogroup"] > label {
-            border: 1px solid #e3e9e6 !important;
-            border-radius: 10px !important;
-            padding: 0.48rem 0.78rem !important;
-            background: #ffffff !important;
-            transition: all .15s ease;
-            min-height: 38px;
-        }
-
-        div[role="radiogroup"] > label:hover {
-            border-color: #b7cec3 !important;
-            background: #f8fbf9 !important;
-        }
-
-        div[role="radiogroup"] > label:has(input:checked) {
-            border-color: #087b4f !important;
-            background: rgba(8,123,79,.08) !important;
-        }
-
-        div[role="radiogroup"] [data-testid="stMarkdownContainer"] p {
-            font-weight: 650;
-            margin: 0;
-        }
-
-        /* Oculta a bolinha do radio para aparência de menu */
-        div[role="radiogroup"] [data-testid="stRadio"] svg,
-        div[role="radiogroup"] label > div:first-child {
-            display: none !important;
-        }
-
-        /* Menos vazio vertical no módulo */
-        .element-container:has(hr) {
-            margin-top: .25rem !important;
-            margin-bottom: .5rem !important;
-        }
-
         </style>
         """,
         unsafe_allow_html=True,
@@ -322,7 +278,7 @@ def renderizar_topo_portal() -> None:
 
 
 def renderizar_portal_inicial() -> None:
-    """Tela inicial do portal, usando componentes nativos para evitar HTML exibido como código."""
+    st.markdown("<div class='sst-portal-shell'>", unsafe_allow_html=True)
     st.markdown(
         f"""
         <div class="sst-portal-card">
@@ -337,34 +293,36 @@ def renderizar_portal_inicial() -> None:
                     </div>
                 </div>
             </div>
+
+            <div class="sst-feature-strip">
+                <div class="sst-feature">
+                    <div class="sst-feature-label">Módulo</div>
+                    <div class="sst-feature-value">SST / EPI</div>
+                </div>
+                <div class="sst-feature">
+                    <div class="sst-feature-label">Ambiente</div>
+                    <div class="sst-feature-value"><span class="sst-status-dot"></span>Desenvolvimento</div>
+                </div>
+                <div class="sst-feature">
+                    <div class="sst-feature-label">Rastreabilidade</div>
+                    <div class="sst-feature-value"><span class="sst-status-dot"></span>Ativa</div>
+                </div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Módulo", "SST / EPI")
-    with col2:
-        st.metric("Ambiente", "Desenvolvimento")
-    with col3:
-        st.metric("Rastreabilidade", "Ativa")
-
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
 def renderizar_cabecalho_modulo() -> None:
-    """Cabeçalho interno compacto e limpo."""
-    topo_esq, topo_dir = st.columns([5.2, 1.8], vertical_alignment="center")
-
-    with topo_esq:
-        renderizar_logo(145)
-
-    with topo_dir:
+    esquerda, direita = st.columns([5, 1.3], vertical_alignment="center")
+    with esquerda:
+        renderizar_logo(160)
+    with direita:
         st.markdown(
             """
-            <div style="text-align:right;line-height:1.25">
+            <div style="text-align:right">
                 <div class="sst-brand-tag">Copa Gestão</div>
                 <div class="sst-brand-title">Segurança do Trabalho</div>
             </div>
@@ -372,33 +330,25 @@ def renderizar_cabecalho_modulo() -> None:
             unsafe_allow_html=True,
         )
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;gap:14px;margin-top:18px;margin-bottom:8px">
+            <div class="sst-hardhat" style="width:58px;height:58px;flex-basis:58px;border-radius:15px">
+                {_hardhat_svg()}
+            </div>
+            <div>
+                <div class="sst-kicker">Gestão integrada de segurança</div>
+                <div class="sst-hero-title" style="font-size:2.15rem">SST / EPI</div>
+            </div>
+        </div>
+        <div class="sst-hero-text">
+            Colaboradores, controle de CA, entregas de EPI, documentos, ordens de serviço de SST
+            e preparação para assinatura biométrica com rastreabilidade.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    titulo_col, status_col = st.columns([5.8, 1.2], vertical_alignment="center")
-    with titulo_col:
-        st.markdown("## 🪖 SST / EPI")
-        st.caption(
-            "Gestão de colaboradores, EPIs, controle de CA, entregas, documentos e assinatura."
-        )
-
-    with status_col:
-        st.markdown(
-            """
-            <div style="
-                text-align:center;
-                border:1px solid #dfe7e3;
-                background:#f6faf8;
-                border-radius:999px;
-                padding:8px 12px;
-                color:#087b4f;
-                font-weight:700;
-                font-size:.82rem;
-            ">● Ambiente de teste</div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 def mostrar_notificacao(mensagem: object) -> None:
     """Notificação temporária nativa do Streamlit."""
