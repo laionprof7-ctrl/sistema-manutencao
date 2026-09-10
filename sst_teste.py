@@ -1,53 +1,46 @@
-"""Entrada estável e profissional do ambiente de desenvolvimento SST/EPI."""
-
-from __future__ import annotations
+"""
+Entrada estável do ambiente de desenvolvimento SST/EPI.
+Carrega primeiro uma tela leve e só abre o módulo completo após ação do usuário.
+"""
 
 import streamlit as st
 
-from sst_ui import (
-    aplicar_estilo_sst,
-    renderizar_aviso_desenvolvimento,
-    renderizar_portal_inicial,
-    renderizar_topo_portal,
-)
-
-
 st.set_page_config(
-    page_title="Copa Gestão | SST/EPI",
+    page_title="Copa Gestão - SST/EPI (Desenvolvimento)",
     page_icon="🦺",
     layout="wide",
-    initial_sidebar_state="collapsed",
 )
 
-aplicar_estilo_sst()
-renderizar_aviso_desenvolvimento()
+st.warning("🧪 AMBIENTE DE DESENVOLVIMENTO — MÓDULO SST/EPI")
+st.caption(
+    "Esta interface é destinada aos testes do novo módulo e não substitui "
+    "o sistema oficial de manutenção."
+)
+
+
+# Rotina leve de manutenção independente da aba selecionada.
+# O cron do PostgreSQL é a automação principal; isto funciona como redundância.
+try:
+    from sst_database import inicializar_banco_sst
+    from sst_services import sincronizar_cas_vencidos
+    inicializar_banco_sst()
+    sincronizar_cas_vencidos()
+except Exception as exc:
+    st.warning(f"Rotina automática SST indisponível neste carregamento: {exc}")
 
 if "sst_modulo_aberto" not in st.session_state:
     st.session_state["sst_modulo_aberto"] = False
 
 if not st.session_state["sst_modulo_aberto"]:
-    renderizar_topo_portal()
-    renderizar_portal_inicial()
+    st.title("🦺 SST / EPI")
+    st.write(
+        "O módulo está pronto para ser carregado. "
+        "Use o botão abaixo para entrar no ambiente de testes."
+    )
 
-    _, centro, _ = st.columns([1.15, 3.7, 1.15])
-    with centro:
-        if st.button(
-            "Entrar no módulo SST/EPI",
-            type="primary",
-            use_container_width=True,
-            icon=":material/login:",
-        ):
-            st.session_state["sst_modulo_aberto"] = True
-            st.rerun()
-
-        st.markdown(
-            """
-            <div class="sst-module-line">
-                Colaboradores • Controle de CA • Entregas de EPI • Documentos / OS de SST • Assinaturas
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    if st.button("Entrar no módulo SST/EPI", type="primary", use_container_width=True):
+        st.session_state["sst_modulo_aberto"] = True
+        st.rerun()
 
 else:
     try:
@@ -59,11 +52,9 @@ else:
             "nivel": 4.0,
         }
 
-        col_voltar, _ = st.columns([1.4, 6])
-        with col_voltar:
-            if st.button("← Voltar ao portal SST", use_container_width=True):
-                st.session_state["sst_modulo_aberto"] = False
-                st.rerun()
+        if st.button("← Voltar para a tela inicial", use_container_width=False):
+            st.session_state["sst_modulo_aberto"] = False
+            st.rerun()
 
         renderizar_modulo_sst(actor_teste)
 
@@ -71,6 +62,6 @@ else:
         st.error("Não foi possível carregar o módulo SST/EPI.")
         st.exception(exc)
 
-        if st.button("Voltar ao portal SST", type="primary"):
+        if st.button("Voltar para a tela inicial", type="primary"):
             st.session_state["sst_modulo_aberto"] = False
             st.rerun()
