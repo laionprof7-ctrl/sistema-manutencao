@@ -321,38 +321,15 @@ def renderizar_portal_inicial() -> None:
 
 
 def renderizar_cabecalho_modulo() -> None:
-    esquerda, direita = st.columns([5, 1.3], vertical_alignment="center")
+    """Cabeçalho interno enxuto, usando componentes nativos para evitar HTML cru."""
+    esquerda, direita = st.columns([5, 1.35], vertical_alignment="center")
     with esquerda:
-        renderizar_logo(160)
+        renderizar_logo(150)
     with direita:
-        st.markdown(
-            """
-            <div style="text-align:right">
-                <div class="sst-brand-tag">Copa Gestão</div>
-                <div class="sst-brand-title">Segurança do Trabalho</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.caption("COPA GESTÃO")
+        st.markdown("**Segurança do Trabalho**")
 
-    st.markdown(
-        f"""
-        <div style="display:flex;align-items:center;gap:14px;margin-top:18px;margin-bottom:8px">
-            <div class="sst-hardhat" style="width:58px;height:58px;flex-basis:58px;border-radius:15px">
-                {_hardhat_svg()}
-            </div>
-            <div>
-                <div class="sst-kicker">Gestão integrada de segurança</div>
-                <div class="sst-hero-title" style="font-size:2.15rem">SST / EPI</div>
-            </div>
-        </div>
-        <div class="sst-hero-text">
-            Colaboradores, controle de CA, entregas de EPI, documentos, ordens de serviço de SST
-            e preparação para assinatura biométrica com rastreabilidade.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("### SST / EPI")
 
 
 def mostrar_notificacao(mensagem: object) -> None:
