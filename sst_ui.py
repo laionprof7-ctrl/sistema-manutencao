@@ -311,9 +311,12 @@ def renderizar_portal_inicial() -> None:
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
 def renderizar_cabecalho_modulo() -> None:
+    """Cabeçalho interno robusto usando componentes nativos do Streamlit."""
     esquerda, direita = st.columns([5, 1.3], vertical_alignment="center")
+
     with esquerda:
         renderizar_logo(160)
+
     with direita:
         st.markdown(
             """
@@ -325,25 +328,34 @@ def renderizar_cabecalho_modulo() -> None:
             unsafe_allow_html=True,
         )
 
-    st.markdown(
-        f"""
-        <div style="display:flex;align-items:center;gap:14px;margin-top:18px;margin-bottom:8px">
-            <div class="sst-hardhat" style="width:58px;height:58px;flex-basis:58px;border-radius:15px">
+    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+
+    col_icone, col_texto = st.columns([0.55, 7.45], vertical_alignment="center")
+
+    with col_icone:
+        st.markdown(
+            f"""
+            <div class="sst-hardhat" style="width:58px;height:58px;border-radius:15px">
                 {_hardhat_svg()}
             </div>
-            <div>
-                <div class="sst-kicker">Gestão integrada de segurança</div>
-                <div class="sst-hero-title" style="font-size:2.15rem">SST / EPI</div>
-            </div>
-        </div>
-        <div class="sst-hero-text">
-            Colaboradores, controle de CA, entregas de EPI, documentos, ordens de serviço de SST
-            e preparação para assinatura biométrica com rastreabilidade.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
 
+    with col_texto:
+        st.markdown(
+            """
+            <div class="sst-kicker">Gestão integrada de segurança</div>
+            <div class="sst-hero-title" style="font-size:2.15rem;margin-bottom:5px">SST / EPI</div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Colaboradores, controle de CA, entregas de EPI, documentos, ordens de serviço de SST "
+            "e preparação para assinatura biométrica com rastreabilidade."
+        )
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 def mostrar_notificacao(mensagem: object) -> None:
     """Notificação temporária nativa do Streamlit."""
