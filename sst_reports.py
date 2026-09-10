@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -45,9 +46,19 @@ def gerar_pdf_documento(documento: dict) -> bytes:
     c.setTitle(documento.get("titulo") or "Documento SST")
     c.setAuthor("Copa Gestão - SST/EPI")
 
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(margem, y, "COPA — SST / EPI")
-    y -= 26
+    logo = Path("logo.png")
+    if logo.exists():
+        try:
+            c.drawImage(str(logo), margem, y - 22, width=105, height=42, preserveAspectRatio=True, mask="auto")
+            y -= 50
+        except Exception:
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(margem, y, "COPA — SST / EPI")
+            y -= 26
+    else:
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(margem, y, "COPA — SST / EPI")
+        y -= 26
     c.setFont("Helvetica-Bold", 13)
     c.drawString(margem, y, documento.get("titulo") or "Documento SST")
     y -= 22
