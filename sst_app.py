@@ -267,9 +267,17 @@ def _render_colaboradores(actor: dict) -> None:
 
 
 def _cadastrar_epi_e_limpar(actor: dict, dados: dict):
-    """Cadastra o EPI e agenda a limpeza segura do formulário no próximo rerun."""
+    """Cadastra o EPI e limpa diretamente os campos do formulário."""
     resultado = cadastrar_epi(actor, **dados)
-    st.session_state["sst_reset_epi_form"] = True
+
+    # Como a confirmação ocorre dentro do diálogo, podemos preparar aqui
+    # o estado que será usado quando a tela principal for redesenhada.
+    st.session_state["sst_epi_nome"] = ""
+    st.session_state["sst_epi_ca"] = ""
+    st.session_state["sst_epi_fabricante"] = ""
+    st.session_state["sst_epi_validade"] = datetime.now(TZ_BAHIA).date()
+    st.session_state["sst_epi_unidade"] = UNIDADES_EPI[0]
+
     return resultado
 
 
@@ -280,19 +288,6 @@ def _render_epis(actor: dict) -> None:
 
         @st.fragment
         def _cadastro_epi_fragmento():
-            # Após um cadastro confirmado com sucesso, limpamos o estado dos
-            # widgets ANTES de recriá-los. Isso evita erro do Streamlit e deixa
-            # o formulário pronto para um novo EPI.
-            if st.session_state.pop("sst_reset_epi_form", False):
-                for chave in (
-                    "sst_epi_nome",
-                    "sst_epi_ca",
-                    "sst_epi_fabricante",
-                    "sst_epi_validade",
-                    "sst_epi_unidade",
-                ):
-                    st.session_state.pop(chave, None)
-
             # Fragmento isolado: alterações aqui não rerenderizam a página inteira.
             c1, c2 = st.columns(2)
 
