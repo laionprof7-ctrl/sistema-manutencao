@@ -141,62 +141,69 @@ def _render_colaboradores(actor: dict) -> None:
     st.subheader("Colaboradores")
 
     with st.expander("➕ Cadastrar colaborador"):
-        # Formulário estável: digitar não reexecuta a página.
-        with st.form("sst_form_colaborador_estavel"):
+
+        @st.fragment
+        def _cadastro_colaborador_fragmento():
+            # Fragmento isolado: qualquer atualização deste cadastro
+            # reexecuta apenas esta área, e não a página inteira.
             f1, f2 = st.columns(2)
+
             nome = f1.text_input("Nome completo", key="sst_cad_nome")
             matricula = f2.text_input("Matrícula", key="sst_cad_matricula")
+
             cpf = f1.text_input("CPF", key="sst_cad_cpf")
             funcao = f2.text_input("Função", key="sst_cad_funcao")
+
             setor = f1.text_input("Setor", key="sst_cad_setor")
-            st.form_submit_button("Aplicar dados", use_container_width=True)
 
-        # Bloco reativo separado: só ele precisa rerenderizar ao marcar/desmarcar.
-        st.caption("Data de admissão")
+            def _resetar_data_admissao():
+                if not st.session_state.get("sst_informar_data_admissao", False):
+                    st.session_state["sst_cad_data_admissao"] = datetime.now(TZ_BAHIA).date()
 
-        def _resetar_data_admissao():
-            if not st.session_state.get("sst_informar_data_admissao", False):
-                st.session_state["sst_cad_data_admissao"] = datetime.now(TZ_BAHIA).date()
-
-        adm1, adm2 = st.columns([1, 2])
-        informar_admissao = adm1.checkbox(
-            "Informar data de admissão",
-            key="sst_informar_data_admissao",
-            on_change=_resetar_data_admissao,
-        )
-        data_admissao = adm2.date_input(
-            "Data",
-            value=datetime.now(TZ_BAHIA).date(),
-            format="DD/MM/YYYY",
-            disabled=not informar_admissao,
-            key="sst_cad_data_admissao",
-        )
-
-        # Os valores do formulário permanecem no session_state.
-        nome = st.session_state.get("sst_cad_nome", "")
-        matricula = st.session_state.get("sst_cad_matricula", "")
-        cpf = st.session_state.get("sst_cad_cpf", "")
-        funcao = st.session_state.get("sst_cad_funcao", "")
-        setor = st.session_state.get("sst_cad_setor", "")
-
-        enviado = st.button(
-            "Cadastrar colaborador",
-            key="sst_btn_cadastrar_colaborador",
-            type="primary",
-            use_container_width=True,
-        )
-
-        if enviado:
-            dados = {
-                "nome": nome, "cpf": cpf, "matricula": matricula, "funcao": funcao,
-                "setor": setor, "data_admissao": data_admissao if informar_admissao else None,
-            }
-            _confirmar_acao(
-                "Cadastro de colaborador",
-                [("Nome", nome), ("Matrícula", matricula or "—"), ("Função", funcao), ("Setor", setor or "—")],
-                lambda: cadastrar_colaborador(actor, **dados),
-                "Colaborador cadastrado com sucesso.",
+            informar_admissao = f2.checkbox(
+                "Informar data de admissão",
+                key="sst_informar_data_admissao",
+                on_change=_resetar_data_admissao,
             )
+
+            data_admissao = f2.date_input(
+                "Data de admissão",
+                value=datetime.now(TZ_BAHIA).date(),
+                format="DD/MM/YYYY",
+                disabled=not informar_admissao,
+                key="sst_cad_data_admissao",
+            )
+
+            enviado = st.button(
+                "Cadastrar colaborador",
+                key="sst_btn_cadastrar_colaborador",
+                type="primary",
+                use_container_width=True,
+            )
+
+            if enviado:
+                dados = {
+                    "nome": nome,
+                    "cpf": cpf,
+                    "matricula": matricula,
+                    "funcao": funcao,
+                    "setor": setor,
+                    "data_admissao": data_admissao if informar_admissao else None,
+                }
+                _confirmar_acao(
+                    "Cadastro de colaborador",
+                    [
+                        ("Nome", nome),
+                        ("Matrícula", matricula or "—"),
+                        ("Função", funcao),
+                        ("Setor", setor or "—"),
+                        ("Admissão", _data(data_admissao) if informar_admissao else "Não informada"),
+                    ],
+                    lambda: cadastrar_colaborador(actor, **dados),
+                    "Colaborador cadastrado com sucesso.",
+                )
+
+        _cadastro_colaborador_fragmento()
 
     ok, colaboradores = _executar(listar_colaboradores, apenas_ativos=False)
     if not ok:
