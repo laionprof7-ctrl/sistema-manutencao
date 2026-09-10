@@ -269,22 +269,58 @@ def _render_epis(actor: dict) -> None:
     st.subheader("EPIs")
 
     with st.expander("➕ Cadastrar EPI"):
-        with st.form("sst_form_epi"):
+
+        @st.fragment
+        def _cadastro_epi_fragmento():
+            # Fragmento isolado: alterações aqui não rerenderizam a página inteira.
             c1, c2 = st.columns(2)
-            nome = c1.text_input("EPI")
-            ca = c2.text_input("CA")
-            fabricante = c1.text_input("Fabricante")
-            validade = c2.date_input("Validade do CA", format="DD/MM/YYYY")
-            unidade = c1.selectbox("Unidade", UNIDADES_EPI)
-            enviado = st.form_submit_button("Cadastrar EPI", use_container_width=True)
-        if enviado:
-            dados = {"nome": nome, "ca": ca, "fabricante": fabricante, "unidade": unidade, "validade_ca": validade}
-            _confirmar_acao(
-                "Cadastro de EPI",
-                [("EPI", nome), ("CA", ca), ("Validade", _data(validade)), ("Unidade", unidade)],
-                lambda: cadastrar_epi(actor, **dados),
-                "EPI cadastrado com sucesso.",
+
+            nome = c1.text_input("EPI", key="sst_epi_nome")
+            ca = c2.text_input("CA", key="sst_epi_ca")
+
+            fabricante = c1.text_input("Fabricante", key="sst_epi_fabricante")
+            validade = c2.date_input(
+                "Validade do CA",
+                value=datetime.now(TZ_BAHIA).date(),
+                format="DD/MM/YYYY",
+                key="sst_epi_validade",
             )
+
+            unidade = c1.selectbox(
+                "Unidade",
+                UNIDADES_EPI,
+                key="sst_epi_unidade",
+            )
+
+            enviado = st.button(
+                "Cadastrar EPI",
+                key="sst_btn_cadastrar_epi",
+                type="primary",
+                use_container_width=True,
+            )
+
+            if enviado:
+                dados = {
+                    "nome": nome,
+                    "ca": ca,
+                    "fabricante": fabricante,
+                    "unidade": unidade,
+                    "validade_ca": validade,
+                }
+                _confirmar_acao(
+                    "Cadastro de EPI",
+                    [
+                        ("EPI", nome),
+                        ("CA", ca),
+                        ("Fabricante", fabricante or "—"),
+                        ("Validade", _data(validade)),
+                        ("Unidade", unidade),
+                    ],
+                    lambda: cadastrar_epi(actor, **dados),
+                    "EPI cadastrado com sucesso.",
+                )
+
+        _cadastro_epi_fragmento()
 
     ok, epis = _executar(listar_epis, apenas_ativos=False)
     if not ok:
