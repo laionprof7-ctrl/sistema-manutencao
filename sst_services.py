@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import case, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from database import registrar_auditoria, transacao, utcnow
@@ -112,6 +112,66 @@ def _desativar_epis_ca_vencido(conn) -> int:
         .values(ativo=False, atualizado_em=utcnow())
     )
     return int(result.rowcount or 0)
+
+
+def sincronizar_cas_vencidos() -> int:
+    """Fallback da aplicação: inativa CAs vencidos quando o backend SST é executado.
+
+    A automação definitiva fica no PostgreSQL (ver supabase_cron_sst.sql), então
+    esta função é uma segunda barreira de segurança e não depende da interface de EPIs.
+    """
+    with transacao() as conn:
+        return _desativar_epis_ca_vencido(conn)
+
+
+def obter_resumo_dashboard_sst() -> dict:
+    """Retorna somente os agregados do dashboard, sem carregar tabelas inteiras."""
+    hoje = _hoje_bahia()
+    fim_ca = hoje + timedelta(days=30)
+    limite_entregas = utcnow() - timedelta(days=30)
+
+    with transacao() as conn:
+        _desativar_epis_ca_vencido(conn)
+
+        colaboradores_ativos = conn.execute(
+            select(func.count()).select_from(COLABORADORES).where(COLABORADORES.c.ativo == True)
+        ).scalar_one()
+        epis_ativos = conn.execute(
+            select(func.count()).select_from(EPIS).where(EPIS.c.ativo == True)
+        ).scalar_one()
+        ca_vencendo = conn.execute(
+            select(func.count()).select_from(EPIS).where(
+                EPIS.c.ativo == True,
+                EPIS.c.validade_ca.is_not(None),
+                EPIS.c.validade_ca >= hoje,
+                EPIS.c.validade_ca <= fim_ca,
+            )
+        ).scalar_one()
+        entregas_30 = conn.execute(
+            select(func.count()).select_from(ENTREGAS_EPI).where(
+                ENTREGAS_EPI.c.entregue_em >= limite_entregas
+            )
+        ).scalar_one()
+        aguardando_assinatura = conn.execute(
+            select(func.count()).select_from(DOCUMENTOS_SST).where(
+                DOCUMENTOS_SST.c.status == "Aguardando Assinatura"
+            )
+        ).scalar_one()
+
+        status_rows = conn.execute(
+            select(DOCUMENTOS_SST.c.status, func.count().label("quantidade"))
+            .group_by(DOCUMENTOS_SST.c.status)
+            .order_by(DOCUMENTOS_SST.c.status)
+        ).mappings().all()
+
+    return {
+        "colaboradores_ativos": int(colaboradores_ativos or 0),
+        "epis_ativos": int(epis_ativos or 0),
+        "ca_vencendo_30": int(ca_vencendo or 0),
+        "entregas_30": int(entregas_30 or 0),
+        "aguardando_assinatura": int(aguardando_assinatura or 0),
+        "documentos_por_status": [dict(r) for r in status_rows],
+    }
 
 
 def cadastrar_colaborador(
