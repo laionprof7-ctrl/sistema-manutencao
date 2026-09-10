@@ -153,12 +153,19 @@ def _render_colaboradores(actor: dict) -> None:
 
         setor = f1.text_input("Setor", key="sst_cad_setor")
 
+        def _resetar_data_admissao():
+            # Ao desmarcar a opção, a data volta para a data atual da Bahia.
+            if not st.session_state.get("sst_informar_data_admissao", False):
+                st.session_state["sst_cad_data_admissao"] = datetime.now(TZ_BAHIA).date()
+
         informar_admissao = f2.checkbox(
             "Informar data de admissão",
             key="sst_informar_data_admissao",
+            on_change=_resetar_data_admissao,
         )
         data_admissao = f2.date_input(
             "Data de admissão",
+            value=datetime.now(TZ_BAHIA).date(),
             format="DD/MM/YYYY",
             disabled=not informar_admissao,
             key="sst_cad_data_admissao",
