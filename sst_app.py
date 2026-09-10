@@ -312,8 +312,8 @@ def _render_epis(actor: dict) -> None:
                     [
                         ("EPI", nome),
                         ("CA", ca),
-                        ("Fabricante", fabricante or "—"),
-                        ("Validade", _data(validade)),
+                        ("Fabricante", fabricante.strip() if fabricante and fabricante.strip() else "Não informado"),
+                        ("Validade do CA", _data(validade)),
                         ("Unidade", unidade),
                     ],
                     lambda: cadastrar_epi(actor, **dados),
