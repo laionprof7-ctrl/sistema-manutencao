@@ -214,19 +214,45 @@ def _render_colaboradores(actor: dict) -> None:
         st.info("Nenhum colaborador cadastrado.")
         return
 
-    tabela = [{
-        "Nome": r["nome"],
-        "Matrícula": r.get("matricula") or "—",
-        "CPF": _mascarar_cpf(r.get("cpf")),
-        "Função": r["funcao"],
-        "Setor": r.get("setor") or "—",
-        "Admissão": _data(r.get("data_admissao")),
-        "Status": "Ativo" if r["ativo"] else "Inativo",
-    } for r in colaboradores]
-    st.dataframe(tabela, use_container_width=True, hide_index=True)
+    # Ordem alfabética padronizada em toda a tela.
+    colaboradores = sorted(
+        colaboradores,
+        key=lambda r: str(r.get("nome") or "").casefold(),
+    )
+
+    filtro_status = st.segmented_control(
+        "Filtrar colaboradores",
+        options=["Todos", "Ativos", "Inativos"],
+        default="Todos",
+        key="sst_filtro_status_colaboradores",
+    )
+
+    if filtro_status == "Ativos":
+        colaboradores_filtrados = [r for r in colaboradores if bool(r["ativo"])]
+    elif filtro_status == "Inativos":
+        colaboradores_filtrados = [r for r in colaboradores if not bool(r["ativo"])]
+    else:
+        colaboradores_filtrados = colaboradores
+
+    if colaboradores_filtrados:
+        tabela = [{
+            "Nome": r["nome"],
+            "Matrícula": r.get("matricula") or "—",
+            "CPF": _mascarar_cpf(r.get("cpf")),
+            "Função": r["funcao"],
+            "Setor": r.get("setor") or "—",
+            "Admissão": _data(r.get("data_admissao")),
+            "Status": "Ativo" if r["ativo"] else "Inativo",
+        } for r in colaboradores_filtrados]
+        st.dataframe(tabela, use_container_width=True, hide_index=True)
+    else:
+        st.info(f"Nenhum colaborador {filtro_status.lower()} encontrado.")
 
     with st.expander("⚙️ Ativar / desativar colaborador"):
-        mapa = {f"{r['nome']} · {r.get('matricula') or 'sem matrícula'} · {'Ativo' if r['ativo'] else 'Inativo'}": r for r in colaboradores}
+        mapa = {
+            f"{r['nome']} · {r.get('matricula') or 'sem matrícula'} · {'Ativo' if r['ativo'] else 'Inativo'}": r
+            for r in colaboradores
+        }
         escolha = st.selectbox("Colaborador", list(mapa), key="sst_status_colab")
         alvo = mapa[escolha]
         novo_status = not bool(alvo["ativo"])
