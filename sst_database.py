@@ -140,7 +140,8 @@ DOCUMENTOS_SST = Table(
     Column("titulo", String(220), nullable=False),
     Column("conteudo_snapshot", Text, nullable=True),
     Column("hash_documento", String(64), nullable=True),
-    Column("pdf_arquivo", LargeBinary, nullable=True),
+    Column("pdf_arquivo", LargeBinary, nullable=True),  # legado: PDFs antigos permanecem compatíveis
+    Column("storage_path", String(500), nullable=True),
     Column("nome_arquivo", String(255), nullable=True),
     Column("status", String(30), nullable=False, default="Rascunho"),
     Column("criado_por", String(40), ForeignKey("usuarios.usuario", ondelete="SET NULL"), nullable=True),
@@ -245,6 +246,7 @@ def inicializar_banco_sst() -> None:
 
     binario = "BYTEA" if ENGINE.dialect.name == "postgresql" else "BLOB"
     _adicionar_coluna_se_ausente("sst_documentos", "pdf_arquivo", binario)
+    _adicionar_coluna_se_ausente("sst_documentos", "storage_path", "VARCHAR(500)")
     _adicionar_coluna_se_ausente("sst_documentos", "nome_arquivo", "VARCHAR(255)")
 
     IX_SST_EPI_ATIVO_VALIDADE.create(bind=ENGINE, checkfirst=True)
