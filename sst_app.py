@@ -644,25 +644,15 @@ def _render_assinaturas() -> None:
 
 def _render_dashboard(actor: dict) -> None:
     st.markdown("### Visão geral")
-    st.caption("Resumo operacional do módulo SST/EPI.")
     ok, resumo = _executar(_resumo_dashboard_cache)
-    if not ok: return
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    if not ok:
+        return
+
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Colaboradores ativos", resumo["colaboradores_ativos"])
-    m2.metric("GHEs ativos", resumo["ghes_ativos"])
-    m3.metric("EPIs ativos", resumo["epis_ativos"])
-    m4.metric("CA vencendo em 30 dias", resumo["ca_vencendo_30"])
-    m5.metric("Entregas em 30 dias", resumo["entregas_30"])
-    m6.metric("Aguardando assinatura", resumo["aguardando_assinatura"])
-    st.write("")
-    c1, c2 = st.columns(2)
-    with c1: renderizar_card_texto("Controle de EPI", "O CA é validado para novas entregas; cada entrega preserva CA, validade e motivo no momento do registro.")
-    with c2: renderizar_card_texto("Documentos e assinatura", "Ordens de Serviço usam o GHE do colaborador e os PDFs fechados preservam o conteúdo exato e o hash SHA-256.")
-    st.markdown("#### Situação dos documentos")
-    status = resumo.get("documentos_por_status") or []
-    if status:
-        st.dataframe([{"Status": r.get("status") or "Sem status", "Quantidade": int(r["quantidade"])} for r in status], use_container_width=True, hide_index=True)
-    else: st.info("Nenhum documento SST criado ainda.")
+    m2.metric("EPIs ativos", resumo["epis_ativos"])
+    m3.metric("CA vencendo em 30 dias", resumo["ca_vencendo_30"])
+    m4.metric("Aguardando assinatura", resumo["aguardando_assinatura"])
 
 
 def renderizar_modulo_sst(actor: dict) -> None:
