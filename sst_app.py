@@ -434,7 +434,7 @@ def _render_assinaturas() -> None:
 
 
 def _render_dashboard(actor: dict) -> None:
-    st.subheader("Visão geral")
+    st.markdown("### Visão geral")
     st.caption("Resumo operacional do módulo SST/EPI.")
 
     ok_c, colaboradores = _executar(listar_colaboradores, apenas_ativos=False)
@@ -505,7 +505,6 @@ def renderizar_modulo_sst(actor: dict) -> None:
         mostrar_notificacao(mensagem)
 
     renderizar_cabecalho_modulo()
-    st.write("")
 
     opcoes = {
         "📊 Visão geral": _render_dashboard,
@@ -522,5 +521,4 @@ def renderizar_modulo_sst(actor: dict) -> None:
         label_visibility="collapsed",
         key="sst_aba_ativa",
     )
-    st.divider()
     opcoes[escolha](actor)
