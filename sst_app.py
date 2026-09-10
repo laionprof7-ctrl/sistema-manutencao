@@ -188,7 +188,9 @@ def _render_colaboradores(actor: dict) -> None:
                     "matricula": matricula,
                     "funcao": funcao,
                     "setor": setor,
-                    "data_admissao": data_admissao if informar_admissao else None,
+                    # A data exibida no campo é sempre a data efetiva da admissão.
+                    # O checkbox serve apenas para permitir edição manual.
+                    "data_admissao": data_admissao,
                 }
                 _confirmar_acao(
                     "Cadastro de colaborador",
@@ -197,7 +199,7 @@ def _render_colaboradores(actor: dict) -> None:
                         ("Matrícula", matricula or "—"),
                         ("Função", funcao),
                         ("Setor", setor or "—"),
-                        ("Admissão", _data(data_admissao) if informar_admissao else "Não informada"),
+                        ("Admissão", _data(data_admissao)),
                     ],
                     lambda: cadastrar_colaborador(actor, **dados),
                     "Colaborador cadastrado com sucesso.",
