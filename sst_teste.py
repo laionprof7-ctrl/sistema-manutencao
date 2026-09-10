@@ -435,30 +435,7 @@ def renderizar_modulo_sst(actor: dict) -> None:
     inicializar_banco_sst()
 
     if mensagem := st.session_state.pop("sst_mensagem", None):
-        mensagem_segura = html.escape(str(mensagem))
-        st.markdown(
-            f"""
-            <style>
-            @keyframes sstAvisoTemporario {{
-                0%, 72% {{ opacity: 1; max-height: 90px; margin-bottom: 1rem; padding: 1rem; }}
-                88% {{ opacity: 0; max-height: 90px; margin-bottom: 1rem; padding: 1rem; }}
-                100% {{ opacity: 0; max-height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; border-width: 0; }}
-            }}
-            .sst-aviso-sucesso {{
-                overflow: hidden;
-                color: #177245;
-                background: rgba(33, 195, 84, 0.10);
-                border: 1px solid rgba(33, 195, 84, 0.14);
-                border-radius: 0.5rem;
-                padding: 1rem;
-                margin-bottom: 1rem;
-                animation: sstAvisoTemporario 5s ease forwards;
-            }}
-            </style>
-            <div class="sst-aviso-sucesso">{mensagem_segura}</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.toast(str(mensagem), icon="✅")
 
     st.title("🦺 SST / EPI")
     st.caption("Gestão de colaboradores, EPIs, entregas, documentos e preparação para assinatura biométrica.")
