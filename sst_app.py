@@ -1,95 +1,434 @@
-"""
-Interface de desenvolvimento do módulo SST / EPI.
-Separada do app.py principal até a validação do módulo.
-"""
+from __future__ import annotations
+
+import html
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 from sst_database import inicializar_banco_sst
+from sst_reports import gerar_pdf_documento
 from sst_services import (
+    atualizar_validade_epi,
     cadastrar_colaborador,
     cadastrar_epi,
+    criar_documento_sst,
+    definir_status_colaborador,
+    definir_status_epi,
+    fechar_documento_para_assinatura,
     listar_colaboradores,
-    listar_epis,
-    listar_entregas,
     listar_documentos,
+    listar_entregas,
+    listar_epis,
+    listar_pendentes_assinatura,
+    obter_documento,
+    obter_pdf_documento,
     registrar_entrega_epi,
 )
 
 
-UNIDADES_EPI = [
-    "unidade",
-    "par",
-    "caixa",
-    "pacote",
-    "kit",
-    "rolo",
-    "frasco",
-    "litro",
-    "metro",
+TZ_BAHIA = ZoneInfo("America/Bahia")
+UNIDADES_EPI = ["unidade", "par", "caixa", "pacote", "kit", "rolo", "frasco", "litro", "metro"]
+TIPOS_DOCUMENTO = [
+    "Ordem de Serviço de SST",
+    "Admissão",
+    "Mudança de função",
+    "Ciência / Orientação",
+    "Treinamento",
+    "Entrega de EPI",
+    "Outro",
 ]
 
 
 def _executar(operacao, *args, **kwargs):
     try:
-        resultado = operacao(*args, **kwargs)
-        return True, resultado
+        return True, operacao(*args, **kwargs)
     except Exception as exc:
         st.error(str(exc))
         return False, None
 
 
-@st.dialog("Confirmar cadastro do colaborador")
-def _confirmar_colaborador(actor, dados):
-    st.write("Confira os dados antes de salvar:")
-    st.write(f"**Nome:** {dados['nome']}")
-    st.write(f"**CPF:** {dados['cpf'] or '—'}")
-    st.write(f"**Matrícula:** {dados['matricula'] or '—'}")
-    st.write(f"**Função:** {dados['funcao']}")
-    st.write(f"**Setor:** {dados['setor'] or '—'}")
+def _data_hora(valor) -> str:
+    if not valor:
+        return "—"
+    try:
+        return valor.astimezone(TZ_BAHIA).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return str(valor)
+
+
+def _data(valor) -> str:
+    if not valor:
+        return "—"
+    try:
+        return valor.strftime("%d/%m/%Y")
+    except Exception:
+        return str(valor)
+
+
+def _mascarar_cpf(cpf: str | None) -> str:
+    if not cpf:
+        return "—"
+    dig = "".join(c for c in cpf if c.isdigit())
+    if len(dig) != 11:
+        return "—"
+    return f"***.{dig[3:6]}.{dig[6:9]}-**"
+
+
+def _tabela_historico_entregas(entregas: list[dict]) -> None:
+    if not entregas:
+        st.info("Nenhuma entrega registrada.")
+        return
+
+    linhas = []
+    for r in entregas:
+        epi_ca = html.escape(str(r["epi"]))
+        if r.get("ca"):
+            epi_ca += f" · CA {html.escape(str(r['ca']))}"
+        linhas.append(
+            "<tr>"
+            f"<td>{html.escape(_data_hora(r['entregue_em']))}</td>"
+            f"<td>{html.escape(str(r['colaborador']))}</td>"
+            f"<td>{html.escape(str(r.get('matricula') or '—'))}</td>"
+            f"<td>{epi_ca}</td>"
+            f"<td class='qtd'>{int(r['quantidade'])}</td>"
+            "</tr>"
+        )
+
+    st.markdown(
+        """
+        <style>
+        .sst-table-wrap {overflow-x:auto; border:1px solid rgba(128,128,128,.22); border-radius:8px;}
+        table.sst-table {width:100%; border-collapse:collapse; font-size:0.92rem;}
+        .sst-table th,.sst-table td {padding:10px 12px; border-bottom:1px solid rgba(128,128,128,.18); text-align:left;}
+        .sst-table th {font-weight:600; background:rgba(128,128,128,.06);}
+        .sst-table td.qtd,.sst-table th.qtd {text-align:center !important; width:110px;}
+        .sst-table tr:last-child td {border-bottom:0;}
+        </style>
+        <div class="sst-table-wrap">
+        <table class="sst-table">
+          <thead><tr>
+            <th>Data</th><th>Colaborador</th><th>Matrícula</th><th>EPI / CA</th><th class="qtd">Quantidade</th>
+          </tr></thead>
+          <tbody>
+        """ + "".join(linhas) + """
+          </tbody>
+        </table>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+@st.dialog("Confirmar ação")
+def _confirmar_acao(titulo: str, resumo: list[tuple[str, str]], acao, mensagem: str):
+    st.warning("Tem certeza que deseja realizar esta ação? Ela será registrada no histórico.")
+    st.markdown(f"**{titulo}**")
+    for rotulo, valor in resumo:
+        st.write(f"**{rotulo}:** {valor}")
     c1, c2 = st.columns(2)
     if c1.button("Cancelar", use_container_width=True):
         st.rerun()
-    if c2.button("Confirmar cadastro", type="primary", use_container_width=True):
-        ok, _ = _executar(cadastrar_colaborador, actor, **dados)
+    if c2.button("Confirmar", type="primary", use_container_width=True):
+        ok, resultado = _executar(acao)
         if ok:
-            st.session_state["sst_mensagem"] = "Colaborador cadastrado com sucesso."
+            st.session_state["sst_mensagem"] = mensagem.format(resultado=resultado)
             st.rerun()
 
 
-@st.dialog("Confirmar cadastro do EPI")
-def _confirmar_epi(actor, dados):
-    st.write("Confira os dados antes de salvar:")
-    st.write(f"**EPI:** {dados['nome']}")
-    st.write(f"**CA:** {dados['ca'] or '—'}")
-    st.write(f"**Validade do CA:** {dados['validade_ca'].strftime('%d/%m/%Y')}")
-    st.write(f"**Fabricante:** {dados['fabricante'] or '—'}")
-    st.write(f"**Unidade:** {dados['unidade']}")
-    c1, c2 = st.columns(2)
-    if c1.button("Cancelar", use_container_width=True):
-        st.rerun()
-    if c2.button("Confirmar cadastro", type="primary", use_container_width=True):
-        ok, _ = _executar(cadastrar_epi, actor, **dados)
-        if ok:
-            st.session_state["sst_mensagem"] = "EPI cadastrado com sucesso."
-            st.rerun()
+def _render_colaboradores(actor: dict) -> None:
+    st.subheader("Colaboradores")
+
+    with st.expander("➕ Cadastrar colaborador"):
+        with st.form("sst_form_colaborador"):
+            c1, c2 = st.columns(2)
+            nome = c1.text_input("Nome completo")
+            matricula = c2.text_input("Matrícula")
+            cpf = c1.text_input("CPF")
+            funcao = c2.text_input("Função")
+            setor = c1.text_input("Setor")
+            informar_admissao = c2.checkbox("Informar data de admissão")
+            data_admissao = c2.date_input("Data de admissão", format="DD/MM/YYYY", disabled=not informar_admissao)
+            enviado = st.form_submit_button("Cadastrar colaborador", use_container_width=True)
+        if enviado:
+            dados = {
+                "nome": nome, "cpf": cpf, "matricula": matricula, "funcao": funcao,
+                "setor": setor, "data_admissao": data_admissao if informar_admissao else None,
+            }
+            _confirmar_acao(
+                "Cadastro de colaborador",
+                [("Nome", nome), ("Matrícula", matricula or "—"), ("Função", funcao), ("Setor", setor or "—")],
+                lambda: cadastrar_colaborador(actor, **dados),
+                "Colaborador cadastrado com sucesso.",
+            )
+
+    ok, colaboradores = _executar(listar_colaboradores, apenas_ativos=False)
+    if not ok:
+        return
+    if not colaboradores:
+        st.info("Nenhum colaborador cadastrado.")
+        return
+
+    tabela = [{
+        "Nome": r["nome"],
+        "Matrícula": r.get("matricula") or "—",
+        "CPF": _mascarar_cpf(r.get("cpf")),
+        "Função": r["funcao"],
+        "Setor": r.get("setor") or "—",
+        "Admissão": _data(r.get("data_admissao")),
+        "Status": "Ativo" if r["ativo"] else "Inativo",
+    } for r in colaboradores]
+    st.dataframe(tabela, use_container_width=True, hide_index=True)
+
+    with st.expander("⚙️ Ativar / desativar colaborador"):
+        mapa = {f"{r['nome']} · {r.get('matricula') or 'sem matrícula'} · {'Ativo' if r['ativo'] else 'Inativo'}": r for r in colaboradores}
+        escolha = st.selectbox("Colaborador", list(mapa), key="sst_status_colab")
+        alvo = mapa[escolha]
+        novo_status = not bool(alvo["ativo"])
+        if st.button("Reativar colaborador" if novo_status else "Desativar colaborador", use_container_width=True):
+            _confirmar_acao(
+                "Alteração de status",
+                [("Colaborador", alvo["nome"]), ("Novo status", "Ativo" if novo_status else "Inativo")],
+                lambda: definir_status_colaborador(actor, int(alvo["id"]), novo_status),
+                "Status do colaborador atualizado.",
+            )
 
 
-@st.dialog("Confirmar entrega de EPI")
-def _confirmar_entrega(actor, dados, colaborador_nome, epi_nome, unidade):
-    st.warning("Confirme somente após conferir o colaborador e o EPI.")
-    st.write(f"**Colaborador:** {colaborador_nome}")
-    st.write(f"**EPI:** {epi_nome}")
-    st.write(f"**Quantidade:** {dados['itens'][0]['quantidade']} {unidade}")
-    st.write(f"**Observação:** {dados['observacao'] or '—'}")
-    c1, c2 = st.columns(2)
-    if c1.button("Cancelar", use_container_width=True):
-        st.rerun()
-    if c2.button("Confirmar entrega", type="primary", use_container_width=True):
-        ok, entrega_id = _executar(registrar_entrega_epi, actor, **dados)
-        if ok:
-            st.session_state["sst_mensagem"] = f"Entrega #{entrega_id} registrada com sucesso."
-            st.rerun()
+def _render_epis(actor: dict) -> None:
+    st.subheader("EPIs")
+
+    with st.expander("➕ Cadastrar EPI"):
+        with st.form("sst_form_epi"):
+            c1, c2 = st.columns(2)
+            nome = c1.text_input("EPI")
+            ca = c2.text_input("CA")
+            fabricante = c1.text_input("Fabricante")
+            validade = c2.date_input("Validade do CA", format="DD/MM/YYYY")
+            unidade = c1.selectbox("Unidade", UNIDADES_EPI)
+            enviado = st.form_submit_button("Cadastrar EPI", use_container_width=True)
+        if enviado:
+            dados = {"nome": nome, "ca": ca, "fabricante": fabricante, "unidade": unidade, "validade_ca": validade}
+            _confirmar_acao(
+                "Cadastro de EPI",
+                [("EPI", nome), ("CA", ca), ("Validade", _data(validade)), ("Unidade", unidade)],
+                lambda: cadastrar_epi(actor, **dados),
+                "EPI cadastrado com sucesso.",
+            )
+
+    ok, epis = _executar(listar_epis, apenas_ativos=False)
+    if not ok:
+        return
+    if not epis:
+        st.info("Nenhum EPI cadastrado.")
+        return
+
+    hoje = datetime.now(TZ_BAHIA).date()
+    proximos = [r for r in epis if r.get("ativo") and r.get("validade_ca") and 0 <= (r["validade_ca"] - hoje).days <= 30]
+    if proximos:
+        st.warning(f"{len(proximos)} EPI(s) possui(em) CA com vencimento nos próximos 30 dias.")
+
+    tabela = [{
+        "EPI": r["nome"],
+        "CA": r.get("ca") or "—",
+        "Validade do CA": _data(r.get("validade_ca")),
+        "Fabricante": r.get("fabricante") or "—",
+        "Unidade": r["unidade"],
+        "Status": "Ativo" if r["ativo"] else "Inativo",
+    } for r in epis]
+    st.dataframe(tabela, use_container_width=True, hide_index=True)
+    st.caption("CA vencido desativa o EPI automaticamente para novas entregas, sem apagar o histórico.")
+
+    with st.expander("🔄 Renovar validade / ativar / desativar EPI"):
+        mapa = {f"{r['nome']} · CA {r.get('ca') or '—'} · {'Ativo' if r['ativo'] else 'Inativo'}": r for r in epis}
+        escolha = st.selectbox("EPI", list(mapa), key="sst_gerir_epi")
+        alvo = mapa[escolha]
+        nova_validade = st.date_input(
+            "Nova validade do CA",
+            value=alvo.get("validade_ca") or hoje,
+            format="DD/MM/YYYY",
+            key=f"sst_nova_validade_{alvo['id']}",
+        )
+        c1, c2 = st.columns(2)
+        if c1.button("Salvar validade e reativar", use_container_width=True):
+            _confirmar_acao(
+                "Renovação do CA",
+                [("EPI", alvo["nome"]), ("CA", alvo.get("ca") or "—"), ("Nova validade", _data(nova_validade))],
+                lambda: atualizar_validade_epi(actor, int(alvo["id"]), nova_validade, True),
+                "Validade do CA atualizada.",
+            )
+        novo_status = not bool(alvo["ativo"])
+        if c2.button("Reativar" if novo_status else "Desativar", use_container_width=True):
+            _confirmar_acao(
+                "Alteração de status do EPI",
+                [("EPI", alvo["nome"]), ("Novo status", "Ativo" if novo_status else "Inativo")],
+                lambda: definir_status_epi(actor, int(alvo["id"]), novo_status),
+                "Status do EPI atualizado.",
+            )
+
+
+def _render_entregas(actor: dict) -> None:
+    st.subheader("Entrega de EPI")
+    ok_c, colaboradores = _executar(listar_colaboradores, apenas_ativos=True)
+    ok_e, epis = _executar(listar_epis, apenas_ativos=True)
+    if not (ok_c and ok_e):
+        return
+
+    epis = [r for r in epis if r.get("validade_ca") is not None]
+    if not colaboradores:
+        st.info("Cadastre ou reative um colaborador antes de registrar uma entrega.")
+    elif not epis:
+        st.info("Cadastre um EPI ativo com CA válido antes de registrar uma entrega.")
+    else:
+        mapa_c = {f"{r['nome']} · Matrícula {r.get('matricula') or '—'}": r for r in colaboradores}
+        mapa_e = {f"{r['nome']} · CA {r['ca']} · {r['unidade']}": r for r in epis}
+
+        with st.form("sst_form_entrega"):
+            colab_label = st.selectbox("Colaborador", list(mapa_c))
+            st.markdown("**Itens da entrega**")
+            e1, q1 = st.columns([4, 1])
+            epi1 = e1.selectbox("EPI 1", list(mapa_e), key="sst_epi1")
+            qtd1 = q1.number_input("Qtd. 1", 1, 1000, 1, 1)
+
+            adicionar2 = st.checkbox("Adicionar segundo EPI")
+            epi2 = qtd2 = None
+            if adicionar2:
+                e2, q2 = st.columns([4, 1])
+                epi2 = e2.selectbox("EPI 2", list(mapa_e), key="sst_epi2")
+                qtd2 = q2.number_input("Qtd. 2", 1, 1000, 1, 1)
+
+            adicionar3 = st.checkbox("Adicionar terceiro EPI")
+            epi3 = qtd3 = None
+            if adicionar3:
+                e3, q3 = st.columns([4, 1])
+                epi3 = e3.selectbox("EPI 3", list(mapa_e), key="sst_epi3")
+                qtd3 = q3.number_input("Qtd. 3", 1, 1000, 1, 1)
+
+            observacao = st.text_area("Observação (opcional)", max_chars=2000)
+            enviado = st.form_submit_button("Registrar entrega", use_container_width=True)
+
+        if enviado:
+            colab = mapa_c[colab_label]
+            selecoes = [(epi1, qtd1)]
+            if adicionar2:
+                selecoes.append((epi2, qtd2))
+            if adicionar3:
+                selecoes.append((epi3, qtd3))
+            itens = [{"epi_id": int(mapa_e[e]["id"]), "quantidade": int(q)} for e, q in selecoes]
+            resumo = [("Colaborador", colab["nome"])]
+            for i, (e, q) in enumerate(selecoes, 1):
+                resumo.append((f"EPI {i}", f"{e} · Quantidade {q}"))
+            _confirmar_acao(
+                "Entrega de EPI",
+                resumo,
+                lambda: registrar_entrega_epi(actor, int(colab["id"]), itens, observacao),
+                "Entrega #{resultado} registrada com sucesso. O comprovante foi criado em Documentos / OS de SST.",
+            )
+
+    ok, entregas = _executar(listar_entregas)
+    if ok:
+        st.divider()
+        st.markdown("#### Histórico de entregas")
+        _tabela_historico_entregas(entregas)
+
+
+def _render_documentos(actor: dict) -> None:
+    st.subheader("Documentos / Ordens de Serviço de SST")
+
+    ok_c, colaboradores = _executar(listar_colaboradores, apenas_ativos=True)
+    if ok_c and colaboradores:
+        mapa_c = {f"{r['nome']} · Matrícula {r.get('matricula') or '—'}": r for r in colaboradores}
+        with st.expander("➕ Criar documento / OS de SST"):
+            with st.form("sst_form_documento"):
+                colab_label = st.selectbox("Colaborador", list(mapa_c))
+                tipo = st.selectbox("Tipo", TIPOS_DOCUMENTO)
+                motivo = st.text_input("Motivo (opcional)")
+                titulo = st.text_input("Título")
+                conteudo = st.text_area("Conteúdo / orientações", height=180, max_chars=20000)
+                enviado = st.form_submit_button("Criar documento", use_container_width=True)
+            if enviado:
+                colab = mapa_c[colab_label]
+                _confirmar_acao(
+                    "Criação de documento SST",
+                    [("Colaborador", colab["nome"]), ("Tipo", tipo), ("Título", titulo)],
+                    lambda: criar_documento_sst(actor, int(colab["id"]), tipo, motivo, titulo, conteudo),
+                    "Documento criado com sucesso.",
+                )
+
+    ok, documentos = _executar(listar_documentos)
+    if not ok:
+        return
+    if not documentos:
+        st.info("Nenhum documento SST criado.")
+        return
+
+    tabela = [{
+        "Número": r["numero"],
+        "Data": _data_hora(r["criado_em"]),
+        "Colaborador": r["colaborador"],
+        "Tipo": r["tipo"],
+        "Título": r["titulo"],
+        "Status": r["status"],
+    } for r in documentos]
+    st.dataframe(tabela, use_container_width=True, hide_index=True)
+
+    rascunhos = [r for r in documentos if r["status"] == "Rascunho"]
+    if rascunhos:
+        with st.expander("📄 Gerar PDF e fechar para assinatura"):
+            mapa = {f"{r['numero']} · {r['colaborador']} · {r['titulo']}": r for r in rascunhos}
+            escolha = st.selectbox("Documento", list(mapa), key="sst_fechar_doc")
+            alvo = mapa[escolha]
+            if st.button("Gerar PDF e fechar", type="primary", use_container_width=True):
+                ok_doc, doc = _executar(obter_documento, int(alvo["id"]))
+                if ok_doc:
+                    pdf = gerar_pdf_documento(doc)
+                    nome = f"{doc['numero']}_{doc['tipo'].replace(' ', '_').replace('/', '-')}.pdf"
+                    _confirmar_acao(
+                        "Fechar documento para assinatura",
+                        [("Documento", doc["numero"]), ("Colaborador", doc["colaborador"]), ("Título", doc["titulo"])],
+                        lambda: fechar_documento_para_assinatura(actor, int(doc["id"]), pdf, nome),
+                        "Documento fechado para assinatura. Hash SHA-256 registrado.",
+                    )
+
+    fechados = [r for r in documentos if r["status"] in ("Aguardando Assinatura", "Assinado") and r.get("nome_arquivo")]
+    if fechados:
+        with st.expander("⬇️ Baixar PDF fechado"):
+            mapa = {f"{r['numero']} · {r['colaborador']} · {r['status']}": r for r in fechados}
+            escolha = st.selectbox("PDF", list(mapa), key="sst_download_doc")
+            alvo = mapa[escolha]
+            ok_pdf, dados = _executar(obter_pdf_documento, int(alvo["id"]))
+            if ok_pdf:
+                pdf, nome, hash_doc = dados
+                st.caption(f"SHA-256: {hash_doc}")
+                st.download_button(
+                    "Baixar PDF",
+                    data=pdf,
+                    file_name=nome,
+                    mime="application/pdf",
+                    use_container_width=True,
+                    on_click="ignore",
+                )
+
+
+def _render_assinaturas() -> None:
+    st.subheader("Assinaturas")
+    st.warning(
+        "A integração com o leitor biométrico ainda não está habilitada. "
+        "O sistema já prepara e preserva o PDF exato e seu hash, mas não simula uma biometria."
+    )
+    ok, pendentes = _executar(listar_pendentes_assinatura)
+    if ok and pendentes:
+        st.markdown("#### Aguardando assinatura biométrica")
+        tabela = [{
+            "Número": r["numero"],
+            "Colaborador": r["colaborador"],
+            "Matrícula": r.get("matricula") or "—",
+            "Tipo": r["tipo"],
+            "Título": r["titulo"],
+            "Fechado em": _data_hora(r["fechado_em"]),
+        } for r in pendentes]
+        st.dataframe(tabela, use_container_width=True, hide_index=True)
+    elif ok:
+        st.info("Nenhum documento aguardando assinatura.")
 
 
 def renderizar_modulo_sst(actor: dict) -> None:
@@ -99,163 +438,21 @@ def renderizar_modulo_sst(actor: dict) -> None:
         st.success(mensagem)
 
     st.title("🦺 SST / EPI")
-    st.caption("Gestão de colaboradores, EPIs, entregas e documentos de Segurança do Trabalho.")
+    st.caption("Gestão de colaboradores, EPIs, entregas, documentos e preparação para assinatura biométrica.")
 
-    aba_colab, aba_epi, aba_entrega, aba_docs, aba_ass = st.tabs(
-        ["👷 Colaboradores", "🦺 EPIs", "📦 Entrega de EPI",
-         "📄 Documentos / OS de SST", "✍️ Assinaturas"]
+    opcoes = {
+        "👷 Colaboradores": _render_colaboradores,
+        "🦺 EPIs": _render_epis,
+        "📦 Entrega de EPI": _render_entregas,
+        "📄 Documentos / OS de SST": _render_documentos,
+        "✍️ Assinaturas": lambda _actor: _render_assinaturas(),
+    }
+    escolha = st.radio(
+        "Módulo",
+        list(opcoes),
+        horizontal=True,
+        label_visibility="collapsed",
+        key="sst_aba_ativa",
     )
-
-    with aba_colab:
-        st.subheader("Colaboradores")
-        with st.expander("➕ Cadastrar colaborador"):
-            with st.form("sst_form_colaborador"):
-                nome = st.text_input("Nome completo")
-                cpf = st.text_input("CPF")
-                matricula = st.text_input("Matrícula")
-                funcao = st.text_input("Função")
-                setor = st.text_input("Setor")
-                enviado = st.form_submit_button("Cadastrar colaborador", use_container_width=True)
-            if enviado:
-                if not nome.strip() or not funcao.strip():
-                    st.error("Nome e função são obrigatórios.")
-                else:
-                    _confirmar_colaborador(actor, {
-                        "nome": nome, "cpf": cpf, "matricula": matricula,
-                        "funcao": funcao, "setor": setor,
-                    })
-
-        ok, colaboradores = _executar(listar_colaboradores, apenas_ativos=True)
-        if ok:
-            if colaboradores:
-                st.dataframe(colaboradores, use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhum colaborador cadastrado.")
-
-    with aba_epi:
-        st.subheader("EPIs")
-        with st.expander("➕ Cadastrar EPI"):
-            with st.form("sst_form_epi"):
-                nome_epi = st.text_input("EPI")
-                ca = st.text_input("CA")
-                validade_ca = st.date_input("Validade do CA", format="DD/MM/YYYY")
-                fabricante = st.text_input("Fabricante")
-                unidade = st.selectbox("Unidade", UNIDADES_EPI)
-                enviado_epi = st.form_submit_button("Cadastrar EPI", use_container_width=True)
-            if enviado_epi:
-                if not nome_epi.strip() or not ca.strip():
-                    st.error("EPI e CA são obrigatórios.")
-                else:
-                    _confirmar_epi(actor, {
-                        "nome": nome_epi, "ca": ca, "fabricante": fabricante,
-                        "unidade": unidade, "validade_ca": validade_ca,
-                    })
-
-        ok, epis = _executar(listar_epis, apenas_ativos=True)
-        if ok:
-            if epis:
-                st.dataframe(epis, use_container_width=True, hide_index=True)
-                st.caption("EPIs com CA vencido são desativados automaticamente e deixam de aparecer nas entregas.")
-            else:
-                st.info("Nenhum EPI ativo cadastrado.")
-
-    with aba_entrega:
-        st.subheader("Entrega de EPI")
-        ok_c, colaboradores = _executar(listar_colaboradores, apenas_ativos=True)
-        ok_e, epis = _executar(listar_epis, apenas_ativos=True)
-
-        if ok_c and ok_e:
-            if not colaboradores:
-                st.info("Cadastre um colaborador ativo antes de registrar uma entrega.")
-            elif not epis:
-                st.info("Cadastre um EPI ativo e com CA válido antes de registrar uma entrega.")
-            else:
-                mapa_colab = {
-                    f"{r['nome']} · Matrícula {r['matricula'] or '—'}": r
-                    for r in colaboradores
-                }
-                mapa_epi = {
-                    f"{r['nome']} · CA {r['ca'] or '—'} · {r['unidade']}": r
-                    for r in epis
-                }
-
-                with st.form("sst_form_entrega"):
-                    colab_label = st.selectbox("Colaborador", list(mapa_colab))
-                    epi_label = st.selectbox("EPI", list(mapa_epi))
-                    quantidade = st.number_input("Quantidade", min_value=1, max_value=1000, value=1, step=1)
-                    observacao = st.text_area("Observação (opcional)", max_chars=2000)
-                    enviado_entrega = st.form_submit_button("Registrar entrega", use_container_width=True)
-
-                if enviado_entrega:
-                    colab = mapa_colab[colab_label]
-                    epi = mapa_epi[epi_label]
-                    _confirmar_entrega(
-                        actor,
-                        {
-                            "colaborador_id": int(colab["id"]),
-                            "itens": [{"epi_id": int(epi["id"]), "quantidade": int(quantidade)}],
-                            "observacao": observacao,
-                        },
-                        colab["nome"],
-                        f"{epi['nome']} · CA {epi['ca'] or '—'}",
-                        epi["unidade"],
-                    )
-
-        ok, entregas = _executar(listar_entregas)
-        if ok:
-            st.divider()
-            st.markdown("#### Histórico de entregas")
-            if entregas:
-                linhas = []
-                for r in entregas:
-                    data = r["entregue_em"]
-                    try:
-                        data = data.astimezone().strftime("%d/%m/%Y %H:%M")
-                    except Exception:
-                        data = str(data)
-
-                    epi_ca = r["epi"]
-                    if r.get("ca"):
-                        epi_ca += f" · CA {r['ca']}"
-
-                    linhas.append({
-                        "Data": data,
-                        "Colaborador": r["colaborador"],
-                        "Matrícula": r.get("matricula") or "—",
-                        "EPI / CA": epi_ca,
-                        "Quantidade": r["quantidade"],
-                    })
-
-                st.dataframe(
-                    linhas,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Data": st.column_config.TextColumn("Data"),
-                        "Colaborador": st.column_config.TextColumn("Colaborador"),
-                        "Matrícula": st.column_config.TextColumn("Matrícula"),
-                        "EPI / CA": st.column_config.TextColumn("EPI / CA"),
-                        "Quantidade": st.column_config.NumberColumn("Quantidade", format="%d"),
-                    },
-                )
-            else:
-                st.info("Nenhuma entrega registrada.")
-
-    with aba_docs:
-        st.subheader("Documentos / Ordens de Serviço de SST")
-        st.info("Aqui serão geradas as OS de SST de admissão, mudança de função, revisões e outros documentos de ciência.")
-        ok, documentos = _executar(listar_documentos)
-        if ok and documentos:
-            st.dataframe(documentos, use_container_width=True, hide_index=True)
-
-    with aba_ass:
-        st.subheader("Assinaturas")
-        st.warning("Integração biométrica ainda não habilitada. A assinatura só será ativada após definição e teste do leitor/SDK.")
-        st.markdown(
-            "- colaborador identificado;\n"
-            "- documento e versão;\n"
-            "- hash de integridade;\n"
-            "- data e hora;\n"
-            "- estação/equipamento;\n"
-            "- resultado da validação biométrica."
-        )
+    st.divider()
+    opcoes[escolha](actor)
