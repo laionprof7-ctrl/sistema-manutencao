@@ -22,6 +22,8 @@ from sst_services import (
     listar_entregas,
     listar_epis,
     listar_pendentes_assinatura,
+    obter_resumo_dashboard_sst,
+    sincronizar_cas_vencidos,
     obter_documento,
     obter_pdf_documento,
     registrar_entrega_epi,
@@ -39,6 +41,23 @@ TIPOS_DOCUMENTO = [
     "Entrega de EPI",
     "Outro",
 ]
+
+
+@st.cache_resource(show_spinner=False)
+def _inicializar_sst_uma_vez() -> bool:
+    """Evita repetir create_all/migrações a cada rerun da interface."""
+    inicializar_banco_sst()
+    return True
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _resumo_dashboard_cache() -> dict:
+    """Cache curto para métricas que podem ser consultadas muitas vezes."""
+    return obter_resumo_dashboard_sst()
+
+
+def _limpar_caches_sst() -> None:
+    _resumo_dashboard_cache.clear()
 
 
 def _executar(operacao, *args, **kwargs):
@@ -133,6 +152,7 @@ def _confirmar_acao(titulo: str, resumo: list[tuple[str, str]], acao, mensagem: 
     if c2.button("Confirmar", type="primary", use_container_width=True):
         ok, resultado = _executar(acao)
         if ok:
+            _limpar_caches_sst()
             st.session_state["sst_mensagem"] = mensagem.format(resultado=resultado)
             st.rerun()
 
@@ -559,38 +579,16 @@ def _render_dashboard(actor: dict) -> None:
     st.markdown("### Visão geral")
     st.caption("Resumo operacional do módulo SST/EPI.")
 
-    ok_c, colaboradores = _executar(listar_colaboradores, apenas_ativos=False)
-    ok_e, epis = _executar(listar_epis, apenas_ativos=False)
-    ok_ent, entregas = _executar(listar_entregas)
-    ok_doc, documentos = _executar(listar_documentos)
-    ok_ass, pendentes = _executar(listar_pendentes_assinatura)
-    if not all((ok_c, ok_e, ok_ent, ok_doc, ok_ass)):
+    ok, resumo = _executar(_resumo_dashboard_cache)
+    if not ok:
         return
 
-    hoje = datetime.now(TZ_BAHIA).date()
-    ativos = sum(1 for r in colaboradores if r.get("ativo"))
-    epis_ativos = sum(1 for r in epis if r.get("ativo"))
-    ca_proximos = sum(
-        1 for r in epis
-        if r.get("ativo") and r.get("validade_ca") and 0 <= (r["validade_ca"] - hoje).days <= 30
-    )
-    limite = datetime.now(TZ_BAHIA) - timedelta(days=30)
-    entregas_30 = 0
-    for r in entregas:
-        data = r.get("entregue_em")
-        if data:
-            try:
-                if data.astimezone(TZ_BAHIA) >= limite:
-                    entregas_30 += 1
-            except Exception:
-                pass
-
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Colaboradores ativos", ativos)
-    m2.metric("EPIs ativos", epis_ativos)
-    m3.metric("CA vencendo em 30 dias", ca_proximos)
-    m4.metric("Entregas em 30 dias", entregas_30)
-    m5.metric("Aguardando assinatura", len(pendentes))
+    m1.metric("Colaboradores ativos", resumo["colaboradores_ativos"])
+    m2.metric("EPIs ativos", resumo["epis_ativos"])
+    m3.metric("CA vencendo em 30 dias", resumo["ca_vencendo_30"])
+    m4.metric("Entregas em 30 dias", resumo["entregas_30"])
+    m5.metric("Aguardando assinatura", resumo["aguardando_assinatura"])
 
     st.write("")
     c1, c2 = st.columns(2)
@@ -606,13 +604,10 @@ def _render_dashboard(actor: dict) -> None:
         )
 
     st.markdown("#### Situação dos documentos")
-    if documentos:
-        contagem = {}
-        for r in documentos:
-            status = r.get("status") or "Sem status"
-            contagem[status] = contagem.get(status, 0) + 1
+    status = resumo.get("documentos_por_status") or []
+    if status:
         st.dataframe(
-            [{"Status": k, "Quantidade": v} for k, v in sorted(contagem.items())],
+            [{"Status": r.get("status") or "Sem status", "Quantidade": int(r["quantidade"])} for r in status],
             use_container_width=True,
             hide_index=True,
         )
@@ -621,7 +616,10 @@ def _render_dashboard(actor: dict) -> None:
 
 def renderizar_modulo_sst(actor: dict) -> None:
     aplicar_estilo_sst()
-    inicializar_banco_sst()
+    _inicializar_sst_uma_vez()
+
+    # Fallback leve: garante a regra mesmo antes/fora do cron do banco.
+    sincronizar_cas_vencidos()
 
     if mensagem := st.session_state.pop("sst_mensagem", None):
         mostrar_notificacao(mensagem)
