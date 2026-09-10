@@ -141,15 +141,26 @@ def _render_colaboradores(actor: dict) -> None:
     st.subheader("Colaboradores")
 
     with st.expander("➕ Cadastrar colaborador"):
+        # O checkbox fica fora do form para que o Streamlit faça rerun imediatamente
+        # e habilite/desabilite o calendário sem exigir envio do formulário.
+        c1, c2 = st.columns(2)
+        informar_admissao = c2.checkbox(
+            "Informar data de admissão",
+            key="sst_informar_data_admissao",
+        )
+
         with st.form("sst_form_colaborador"):
-            c1, c2 = st.columns(2)
-            nome = c1.text_input("Nome completo")
-            matricula = c2.text_input("Matrícula")
-            cpf = c1.text_input("CPF")
-            funcao = c2.text_input("Função")
-            setor = c1.text_input("Setor")
-            informar_admissao = c2.checkbox("Informar data de admissão")
-            data_admissao = c2.date_input("Data de admissão", format="DD/MM/YYYY", disabled=not informar_admissao)
+            f1, f2 = st.columns(2)
+            nome = f1.text_input("Nome completo")
+            matricula = f2.text_input("Matrícula")
+            cpf = f1.text_input("CPF")
+            funcao = f2.text_input("Função")
+            setor = f1.text_input("Setor")
+            data_admissao = f2.date_input(
+                "Data de admissão",
+                format="DD/MM/YYYY",
+                disabled=not informar_admissao,
+            )
             enviado = st.form_submit_button("Cadastrar colaborador", use_container_width=True)
         if enviado:
             dados = {
