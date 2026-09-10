@@ -57,6 +57,7 @@ EPIS = Table(
 Index("ix_sst_epi_nome", EPIS.c.nome)
 Index("ix_sst_epi_ativo", EPIS.c.ativo)
 Index("ix_sst_epi_validade_ca", EPIS.c.validade_ca)
+IX_SST_EPI_ATIVO_VALIDADE = Index("ix_sst_epi_ativo_validade", EPIS.c.ativo, EPIS.c.validade_ca)
 
 
 ENTREGAS_EPI = Table(
@@ -108,6 +109,7 @@ DOCUMENTOS_SST = Table(
 Index("ix_sst_documento_colaborador", DOCUMENTOS_SST.c.colaborador_id)
 Index("ix_sst_documento_tipo", DOCUMENTOS_SST.c.tipo)
 Index("ix_sst_documento_status", DOCUMENTOS_SST.c.status)
+IX_SST_DOCUMENTO_STATUS_FECHADO = Index("ix_sst_documento_status_fechado", DOCUMENTOS_SST.c.status, DOCUMENTOS_SST.c.fechado_em)
 
 
 ASSINATURAS_SST = Table(
@@ -158,3 +160,7 @@ def inicializar_banco_sst() -> None:
     binario = "BYTEA" if ENGINE.dialect.name == "postgresql" else "BLOB"
     _adicionar_coluna_se_ausente("sst_documentos", "pdf_arquivo", binario)
     _adicionar_coluna_se_ausente("sst_documentos", "nome_arquivo", "VARCHAR(255)")
+
+    # create_all não adiciona índices novos em tabelas já existentes; criamos com checkfirst.
+    IX_SST_EPI_ATIVO_VALIDADE.create(bind=ENGINE, checkfirst=True)
+    IX_SST_DOCUMENTO_STATUS_FECHADO.create(bind=ENGINE, checkfirst=True)
