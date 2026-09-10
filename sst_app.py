@@ -574,11 +574,16 @@ def _render_documentos(actor: dict) -> None:
     hoje = datetime.now(TZ_BAHIA).date()
     inicio = f5.date_input("De", value=hoje - timedelta(days=30), format="DD/MM/YYYY", disabled=not usar_periodo, key="sst_doc_inicio")
     fim = f6.date_input("Até", value=hoje, format="DD/MM/YYYY", disabled=not usar_periodo, key="sst_doc_fim")
-    busca = st.text_input("Buscar por número, título ou colaborador", key="sst_doc_busca")
-    limite = st.selectbox("Quantidade máxima", [50, 100, 200], index=1, key="sst_doc_limite")
+    busca = st.text_input(
+        "Buscar por número, colaborador, matrícula, título ou motivo",
+        key="sst_doc_busca",
+        placeholder="Digite para pesquisar...",
+    )
 
+    # O usuário não precisa escolher limite técnico. A tela consulta até 100 registros por vez;
+    # os demais continuam armazenados e podem ser encontrados pelos filtros e pela busca.
     ok, documentos = _executar(
-        _documentos_cache, int(limite), mapa_fc[colab_f], tipo_f, status_f,
+        _documentos_cache, 100, mapa_fc[colab_f], tipo_f, status_f,
         inicio if usar_periodo else None, fim if usar_periodo else None, busca.strip() or None,
     )
     if not ok: return
