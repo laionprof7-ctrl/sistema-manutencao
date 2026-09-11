@@ -51,7 +51,10 @@ def _segredo_storage(nome: str) -> str:
 
 def _storage_config() -> tuple[str, str]:
     url = _segredo_storage("SUPABASE_URL").rstrip("/")
-    chave = _segredo_storage("SUPABASE_SECRET_KEY")
+    # O endpoint REST do Storage exige um JWT no header Authorization.
+    # Por compatibilidade com o Storage atual, usamos a chave legacy service_role
+    # somente no backend do Streamlit. Ela nunca deve ir para GitHub ou navegador.
+    chave = _segredo_storage("SUPABASE_SERVICE_ROLE_KEY")
     if not url.startswith("https://"):
         raise RegraSSTError("SUPABASE_URL inválida nos Secrets do aplicativo.")
     return url, chave
@@ -74,7 +77,11 @@ def _storage_requisicao(metodo: str, path: str, dados: bytes | None = None) -> b
     url_base, chave = _storage_config()
     caminho = quote(path, safe="/")
     url = f"{url_base}/storage/v1/object/{STORAGE_BUCKET_SST}/{caminho}"
-    headers = {"apikey": chave, "User-Agent": "Copa-SST-Backend/1.0"}
+    headers = {
+        "apikey": chave,
+        "Authorization": f"Bearer {chave}",
+        "User-Agent": "Copa-SST-Backend/1.0",
+    }
     if dados is not None:
         headers["Content-Type"] = "application/pdf"
         headers["x-upsert"] = "false"
