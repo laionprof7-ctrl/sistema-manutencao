@@ -1,10 +1,8 @@
 """
 Entrada do ambiente de desenvolvimento.
 
-O Streamlit Community Cloud ainda inicia este arquivo na branch
-desenvolvimento-sst. Para evitar dois portais concorrentes, este arquivo
-executa o app.py completo (Copa Gestão), que passa a ser a única fonte
-da navegação, autenticação e controle de sessão.
+O Streamlit Community Cloud inicia este arquivo na branch desenvolvimento-sst.
+O app.py continua sendo a fonte única de autenticação, sessão e navegação.
 """
 
 import time
@@ -16,9 +14,8 @@ from copa_brand import instalar_tema_apos_page_config
 
 instalar_tema_apos_page_config()
 
-# A Manutenção usa uma inicialização rápida quando o schema já está pronto e
-# limita a verificação automática de OS expiradas. Isso evita consultas e
-# introspecções repetidas durante a navegação normal.
+# A Manutenção usa inicialização rápida e limita verificações automáticas
+# repetitivas durante a navegação normal.
 try:
     import database
     from manutencao_fast_init import (
@@ -31,8 +28,7 @@ try:
 except Exception:
     pass
 
-# Não carregamos a pilha SST no login, Portal ou Manutenção. Ela só entra
-# na memória quando o usuário realmente abre Segurança do Trabalho.
+# A pilha SST só é carregada quando o usuário realmente abre o módulo.
 if st.session_state.get("aba_ativa") == "SST":
     try:
         import sst_database
@@ -42,7 +38,6 @@ if st.session_state.get("aba_ativa") == "SST":
     except Exception:
         pass
 
-    # Limpeza de retenção no máximo uma vez por hora por sessão.
     agora = time.time()
     ultima = float(st.session_state.get("sst_retencao_verificada_em", 0.0))
     if agora - ultima >= 3600:
@@ -64,34 +59,49 @@ APP = Path(__file__).with_name("app.py")
 if not APP.exists():
     raise FileNotFoundError("app.py não encontrado ao lado de sst_teste.py")
 
-codigo = APP.read_text(encoding="utf-8")
 
-# Mantém os dados de leitura da Manutenção em memória por mais tempo.
-# Toda operação de escrita já limpa esses caches explicitamente.
-codigo = codigo.replace("@st.cache_data(ttl=12, show_spinner=False)", "@st.cache_data(ttl=30, show_spinner=False)")
-codigo = codigo.replace("@st.cache_data(ttl=10, show_spinner=False)", "@st.cache_data(ttl=30, show_spinner=False)")
+@st.cache_resource(show_spinner=False)
+def _compilar_app():
+    """Lê, ajusta e compila app.py uma única vez por processo/deploy.
 
-# Os nomes dos módulos ficam limpos, sem símbolos, tanto no portal quanto
-# na barra lateral. Mantemos os demais ícones apenas onde ajudam a operação.
-codigo = codigo.replace('"🔧 Manutenção"', '"Manutenção"')
-codigo = codigo.replace('"🦺 Segurança do Trabalho"', '"Segurança do Trabalho"')
+    Antes, todo clique/rerun relia o arquivo, fazia várias substituições de texto
+    e compilava novamente o app inteiro. O código compilado pode ser reutilizado
+    com segurança até o próximo deploy, quando o processo é reiniciado.
+    """
+    codigo = APP.read_text(encoding="utf-8")
 
-# A Manutenção agora é um módulo do Copa Gestão, portanto segue a mesma
-# navegação do SST: volta ao portal e não oferece logout dentro do módulo.
-codigo = codigo.replace(
-    '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n'
-    '    st.title("Ordens de Serviço")',
-    '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n\n'
-    '    if st.button("← Voltar ao menu principal", use_container_width=False, key="voltar_portal_manutencao"):\n'
-    '        navegar("Portal")\n'
-    '        st.rerun()\n\n'
-    '    st.title("Ordens de Serviço")',
-)
-codigo = codigo.replace(
-    '    # Navegação principal também fica no corpo da página para funcionar bem no celular,\n'
-    '    # onde a barra lateral do Streamlit pode ficar recolhida/oculta.\n'
-    '    opcoes.append(("🚪 Sair / Logout", "Logout"))\n\n',
-    '',
-)
+    # Leituras ficam em cache por mais tempo. Escritas já limpam os caches.
+    codigo = codigo.replace(
+        "@st.cache_data(ttl=12, show_spinner=False)",
+        "@st.cache_data(ttl=60, show_spinner=False)",
+    )
+    codigo = codigo.replace(
+        "@st.cache_data(ttl=10, show_spinner=False)",
+        "@st.cache_data(ttl=60, show_spinner=False)",
+    )
 
-exec(compile(codigo, str(APP), "exec"), {"__name__": "__main__", "__file__": str(APP)})
+    # Nomes limpos dos módulos.
+    codigo = codigo.replace('"🔧 Manutenção"', '"Manutenção"')
+    codigo = codigo.replace('"🦺 Segurança do Trabalho"', '"Segurança do Trabalho"')
+
+    # Manutenção é um módulo do Copa Gestão: volta ao portal e não exibe logout interno.
+    codigo = codigo.replace(
+        '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n'
+        '    st.title("Ordens de Serviço")',
+        '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n\n'
+        '    if st.button("← Voltar ao menu principal", use_container_width=False, key="voltar_portal_manutencao"):\n'
+        '        navegar("Portal")\n'
+        '        st.rerun()\n\n'
+        '    st.title("Ordens de Serviço")',
+    )
+    codigo = codigo.replace(
+        '    # Navegação principal também fica no corpo da página para funcionar bem no celular,\n'
+        '    # onde a barra lateral do Streamlit pode ficar recolhida/oculta.\n'
+        '    opcoes.append(("🚪 Sair / Logout", "Logout"))\n\n',
+        '',
+    )
+
+    return compile(codigo, str(APP), "exec")
+
+
+exec(_compilar_app(), {"__name__": "__main__", "__file__": str(APP)})
