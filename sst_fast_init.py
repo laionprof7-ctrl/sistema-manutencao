@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 
 import sst_database as db
 
+# A base já preparada não precisa repetir inspeções completas a cada novo processo
+# do Streamlit. Esse número só deve mudar quando houver nova migração SST.
+SCHEMA_VERSION = 2
+SCHEMA_VERSION_KEY = "schema_sst_version"
 
 _MIGRACOES = {
     "sst_colaboradores": [("ghe_id", "INTEGER")],
@@ -37,13 +41,48 @@ _INDICES = [
 ]
 
 
-def inicializar_banco_sst_rapido() -> None:
-    """Inicialização compatível, reduzindo consultas repetidas de metadados.
+def _schema_ja_atualizado() -> bool:
+    """Fast path: uma única consulta simples substitui dezenas de introspecções."""
+    try:
+        with db.ENGINE.connect() as conn:
+            versao = conn.execute(
+                select(db.CONTADORES_SST.c.valor).where(
+                    db.CONTADORES_SST.c.chave == SCHEMA_VERSION_KEY
+                )
+            ).scalar_one_or_none()
+        return int(versao or 0) >= SCHEMA_VERSION
+    except Exception:
+        # Base nova, tabela ausente ou versão antiga: segue para o caminho completo.
+        return False
 
-    Em uma base já criada, evita repetir create_all/checkfirst para cada objeto e
-    lê as colunas uma única vez por tabela. Em uma base nova, mantém o caminho
-    seguro usando create_all antes das migrações aditivas.
-    """
+
+def _marcar_schema_atualizado() -> None:
+    with db.ENGINE.begin() as conn:
+        existente = conn.execute(
+            select(db.CONTADORES_SST.c.valor).where(
+                db.CONTADORES_SST.c.chave == SCHEMA_VERSION_KEY
+            )
+        ).scalar_one_or_none()
+        if existente is None:
+            conn.execute(
+                db.CONTADORES_SST.insert().values(
+                    chave=SCHEMA_VERSION_KEY,
+                    valor=SCHEMA_VERSION,
+                )
+            )
+        else:
+            conn.execute(
+                db.CONTADORES_SST.update()
+                .where(db.CONTADORES_SST.c.chave == SCHEMA_VERSION_KEY)
+                .values(valor=SCHEMA_VERSION)
+            )
+
+
+def inicializar_banco_sst_rapido() -> None:
+    """Valida/migra a estrutura somente quando a versão do schema exigir."""
+    if _schema_ja_atualizado():
+        return
+
     insp = inspect(db.ENGINE)
     tabelas_existentes = set(insp.get_table_names())
     tabelas_necessarias = {t.name for t in db.TABELAS_SST}
@@ -64,8 +103,6 @@ def inicializar_banco_sst_rapido() -> None:
             for tabela, coluna, ddl in alteracoes:
                 conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {ddl}"))
 
-    # Os índices abaixo já existem no ambiente normal. Só fazemos a criação
-    # quando o inspector mostra que algum está ausente.
     indices_por_tabela: dict[str, set[str]] = {}
     for indice in _INDICES:
         tabela = indice.table.name
@@ -78,3 +115,4 @@ def inicializar_banco_sst_rapido() -> None:
             indices_por_tabela[tabela].add(indice.name)
 
     db._inicializar_contador_documentos_ano_atual()
+    _marcar_schema_atualizado()
