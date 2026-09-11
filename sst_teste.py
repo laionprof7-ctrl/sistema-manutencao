@@ -115,7 +115,8 @@ def _compilar_app():
         codigo = codigo.replace(antigo, novo)
 
     # Menu da Manutenção em três colunas. As chaves dos botões reaproveitam os
-    # seletores de ícone do SST, mas só existem nesta tela, então não há conflito.
+    # mesmos desenhos do SST. O CSS local abaixo ativa o pseudo-elemento do ícone
+    # também dentro do container da Manutenção.
     codigo = codigo.replace(
         '    cols = st.columns(2)\n'
         '    for i, (rotulo, destino) in enumerate(opcoes):\n'
@@ -125,6 +126,23 @@ def _compilar_app():
         '            else:\n'
         '                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))',
         '    st.caption("Escolha a área que deseja acessar.")\n'
+        '    st.markdown("""\n'
+        '    <style>\n'
+        '    .st-key-manutencao_menu_cards button {\n'
+        '        display:flex !important; align-items:center !important; justify-content:flex-start !important;\n'
+        '        gap:1.45rem !important; text-align:left !important;\n'
+        '    }\n'
+        '    .st-key-manutencao_menu_cards button::before {\n'
+        '        content:""; display:block; flex:0 0 76px; width:76px; height:76px;\n'
+        '        background:linear-gradient(180deg,#14875b 0%,#005b46 100%);\n'
+        '        -webkit-mask-position:center; mask-position:center;\n'
+        '        -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;\n'
+        '        -webkit-mask-size:contain; mask-size:contain;\n'
+        '    }\n'
+        '    @media (max-width:900px){.st-key-manutencao_menu_cards button::before{flex-basis:58px;width:58px;height:58px}}\n'
+        '    @media (max-width:768px){.st-key-manutencao_menu_cards button::before{flex-basis:44px;width:44px;height:44px}}\n'
+        '    </style>\n'
+        '    """, unsafe_allow_html=True)\n'
         '    icones_menu = {\n'
         '        "Abrir Chamado": 4,\n'
         '        "Consultar Chamados": 5,\n'
