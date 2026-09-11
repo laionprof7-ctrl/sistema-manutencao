@@ -170,11 +170,40 @@ ASSINATURAS_SST = Table(
     Column("assinado_em", DateTime(timezone=True), nullable=False),
     Column("estacao", String(160), nullable=True),
     Column("referencia_biometrica", String(255), nullable=True),
+    # Evidências técnicas do agente local. Não armazenamos imagem da digital.
+    Column("agente_id", String(120), nullable=True),
+    Column("dispositivo_modelo", String(120), nullable=True),
+    Column("dispositivo_serial", String(120), nullable=True),
+    Column("sdk_versao", String(80), nullable=True),
+    Column("evento_id", String(120), nullable=True),
+    Column("score_verificacao", Integer, nullable=True),
     Column("detalhes", Text, nullable=True),
 )
 Index("ix_sst_assinatura_documento", ASSINATURAS_SST.c.documento_id)
 Index("ix_sst_assinatura_colaborador", ASSINATURAS_SST.c.colaborador_id)
 Index("ix_sst_assinatura_data", ASSINATURAS_SST.c.assinado_em)
+IX_SST_ASSINATURA_EVENTO = Index("ux_sst_assinatura_evento", ASSINATURAS_SST.c.evento_id, unique=True)
+
+
+BIOMETRIAS_COLABORADORES = Table(
+    "sst_biometrias_colaboradores",
+    METADATA,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("colaborador_id", Integer, ForeignKey("sst_colaboradores.id", ondelete="RESTRICT"), nullable=False, unique=True),
+    Column("provedor", String(80), nullable=False, default="Nitgen eNBioBSP"),
+    # Referência opaca ao cadastro mantido pelo agente/SDK. Nunca imagem bruta da impressão digital.
+    Column("referencia_biometrica", String(255), nullable=False),
+    Column("template_hash", String(64), nullable=True),
+    Column("agente_id", String(120), nullable=True),
+    Column("dispositivo_modelo", String(120), nullable=True),
+    Column("dispositivo_serial", String(120), nullable=True),
+    Column("sdk_versao", String(80), nullable=True),
+    Column("ativo", Boolean, nullable=False, default=True),
+    Column("cadastrado_em", DateTime(timezone=True), nullable=False),
+    Column("atualizado_em", DateTime(timezone=True), nullable=False),
+)
+Index("ix_sst_biometria_colaborador", BIOMETRIAS_COLABORADORES.c.colaborador_id)
+Index("ix_sst_biometria_referencia", BIOMETRIAS_COLABORADORES.c.referencia_biometrica)
 
 
 CONTADORES_SST = Table(
@@ -194,6 +223,7 @@ TABELAS_SST = [
     ITENS_ENTREGA_EPI,
     DOCUMENTOS_SST,
     ASSINATURAS_SST,
+    BIOMETRIAS_COLABORADORES,
     CONTADORES_SST,
 ]
 
@@ -249,11 +279,20 @@ def inicializar_banco_sst() -> None:
     _adicionar_coluna_se_ausente("sst_documentos", "storage_path", "VARCHAR(500)")
     _adicionar_coluna_se_ausente("sst_documentos", "nome_arquivo", "VARCHAR(255)")
 
+    # Migrações aditivas da infraestrutura biométrica.
+    _adicionar_coluna_se_ausente("sst_assinaturas", "agente_id", "VARCHAR(120)")
+    _adicionar_coluna_se_ausente("sst_assinaturas", "dispositivo_modelo", "VARCHAR(120)")
+    _adicionar_coluna_se_ausente("sst_assinaturas", "dispositivo_serial", "VARCHAR(120)")
+    _adicionar_coluna_se_ausente("sst_assinaturas", "sdk_versao", "VARCHAR(80)")
+    _adicionar_coluna_se_ausente("sst_assinaturas", "evento_id", "VARCHAR(120)")
+    _adicionar_coluna_se_ausente("sst_assinaturas", "score_verificacao", "INTEGER")
+
     IX_SST_EPI_ATIVO_VALIDADE.create(bind=ENGINE, checkfirst=True)
     IX_SST_COLABORADOR_GHE.create(bind=ENGINE, checkfirst=True)
     IX_SST_ENTREGA_MOTIVO.create(bind=ENGINE, checkfirst=True)
     IX_SST_DOCUMENTO_ENTREGA.create(bind=ENGINE, checkfirst=True)
     IX_SST_DOCUMENTO_STATUS_FECHADO.create(bind=ENGINE, checkfirst=True)
     IX_SST_DOCUMENTO_TIPO_STATUS_CRIADO.create(bind=ENGINE, checkfirst=True)
+    IX_SST_ASSINATURA_EVENTO.create(bind=ENGINE, checkfirst=True)
 
     _inicializar_contador_documentos_ano_atual()
