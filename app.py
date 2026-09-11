@@ -16,7 +16,6 @@ from database import (
     obter_usuario, transacao, USUARIOS, utcnow,
 )
 from permissions import pode_editar_usuario, pode_gerir_os, pode_gerir_usuarios, pode_triagem, pode_ver_oficina
-from reports import gerar_relatorio_pdf
 from security import hash_senha, normalizar_usuario, verificar_senha
 from services import (
     ConcorrenciaError, RegraNegocioError, alterar_nome, alterar_nivel, aprovar_chamado,
@@ -88,6 +87,8 @@ def carregar_resumo():
 
 @st.cache_data(ttl=600, show_spinner=False)
 def gerar_pdf_em_cache(df_rel: pd.DataFrame, subtitulo: str = "") -> bytes:
+    # Import pesado somente quando o usuário realmente gerar um relatório.
+    from reports import gerar_relatorio_pdf
     return gerar_relatorio_pdf(df_rel, subtitulo)
 
 
@@ -98,7 +99,6 @@ def limpar_cache_dados():
     carregar_resumo.clear()
 
 
-preparar_banco()
 
 # ---------- Sessão ----------
 SESSION_DURATION_SECONDS = 60 * 60
@@ -315,6 +315,10 @@ if aba == "SST":
 
 # ---------- Manutenção > Ordens de Serviço ----------
 if aba in ("Menu", "Manutencao"):
+    # A preparação do banco da manutenção fica sob demanda.
+    # Isso evita travar login/portal em reinícios frios do Streamlit.
+    preparar_banco()
+
     st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")
     st.title("Ordens de Serviço")
     st.caption(f"Bem-vindo, {user_data['nome']}")
