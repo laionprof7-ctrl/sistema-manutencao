@@ -6,7 +6,6 @@ from sqlalchemy import delete, select
 
 from database import registrar_auditoria, transacao, utcnow
 from sst_database import ASSINATURAS_SST, DOCUMENTOS_SST
-from sst_services import _storage_excluir
 
 PRAZO_ASSINATURA_DIAS = 7
 
@@ -65,15 +64,20 @@ def limpar_documentos_sem_assinatura_expirados() -> dict:
             )
 
     falhas = 0
-    for row in expirados:
-        caminho = row.get("storage_path")
-        if not caminho:
-            continue
-        try:
-            _storage_excluir(str(caminho))
-        except Exception:
-            # O registro já saiu do sistema; falha de limpeza do objeto não deve
-            # restaurar um documento expirado nem interromper o uso do módulo.
-            falhas += 1
+    if expirados:
+        # O módulo de Storage é carregado somente quando realmente há um PDF
+        # expirado para remover. Na maioria dos acessos essa importação é evitada.
+        from sst_services import _storage_excluir
+
+        for row in expirados:
+            caminho = row.get("storage_path")
+            if not caminho:
+                continue
+            try:
+                _storage_excluir(str(caminho))
+            except Exception:
+                # O registro já saiu do sistema; falha de limpeza do objeto não deve
+                # restaurar um documento expirado nem interromper o uso do módulo.
+                falhas += 1
 
     return {"removidos": len(expirados), "storage_falhas": falhas}
