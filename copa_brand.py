@@ -85,19 +85,35 @@ def aplicar_tema_global() -> None:
             transform: translateY(-1px);
             box-shadow: 0 7px 18px rgba(8,123,79,.13);
         }}
+
+        /* Botões principais do portal: alto contraste e proporção de módulo. */
         button[data-testid="stBaseButton-primary"],
         div.stButton > button[kind="primary"] {{
-            background: linear-gradient(135deg, var(--copa-green), var(--copa-green-dark)) !important;
+            background: linear-gradient(135deg, #07965d, var(--copa-green-dark)) !important;
             color: #ffffff !important;
             border-color: transparent !important;
+            min-height: 64px !important;
+            font-size: 1.22rem !important;
+            font-weight: 850 !important;
+            letter-spacing: .015em !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,.22);
         }}
         button[data-testid="stBaseButton-primary"] *,
         div.stButton > button[kind="primary"] *,
         button[data-testid="stBaseButton-primary"] p,
-        div.stButton > button[kind="primary"] p {{
+        div.stButton > button[kind="primary"] p,
+        button[data-testid="stBaseButton-primary"] span,
+        div.stButton > button[kind="primary"] span {{
             color: #ffffff !important;
             opacity: 1 !important;
-            font-weight: 800 !important;
+            font-size: inherit !important;
+            font-weight: inherit !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }}
+        button[data-testid="stBaseButton-primary"]:hover,
+        div.stButton > button[kind="primary"]:hover {{
+            background: linear-gradient(135deg, #0aa868, #00664e) !important;
+            color: #ffffff !important;
         }}
 
         [data-testid="stMetric"] {{
@@ -143,6 +159,11 @@ def aplicar_tema_global() -> None:
             }}
             h1 {{ font-size: 1.85rem !important; }}
             h2 {{ font-size: 1.45rem !important; }}
+            button[data-testid="stBaseButton-primary"],
+            div.stButton > button[kind="primary"] {{
+                min-height: 58px !important;
+                font-size: 1.08rem !important;
+            }}
         }}
         </style>
         """,
