@@ -16,6 +16,21 @@ from copa_brand import instalar_tema_apos_page_config
 
 instalar_tema_apos_page_config()
 
+# A Manutenção usa uma inicialização rápida quando o schema já está pronto e
+# limita a verificação automática de OS expiradas. Isso evita consultas e
+# introspecções repetidas durante a navegação normal.
+try:
+    import database
+    from manutencao_fast_init import (
+        arquivar_chamados_expirados_rapido,
+        inicializar_banco_rapido,
+    )
+
+    database.inicializar_banco = inicializar_banco_rapido
+    database.arquivar_chamados_expirados = arquivar_chamados_expirados_rapido
+except Exception:
+    pass
+
 # Não carregamos a pilha SST no login, Portal ou Manutenção. Ela só entra
 # na memória quando o usuário realmente abre Segurança do Trabalho.
 if st.session_state.get("aba_ativa") == "SST":
@@ -25,8 +40,6 @@ if st.session_state.get("aba_ativa") == "SST":
 
         sst_database.inicializar_banco_sst = inicializar_banco_sst_rapido
     except Exception:
-        # Em caso de incompatibilidade inesperada, o módulo SST ainda poderá
-        # usar a inicialização original em vez de impedir o acesso ao sistema.
         pass
 
     # Limpeza de retenção no máximo uma vez por hora por sessão.
@@ -44,7 +57,6 @@ if st.session_state.get("aba_ativa") == "SST":
                     "foram removidos automaticamente."
                 )
         except Exception:
-            # A retenção nunca deve impedir o acesso ao portal.
             st.session_state["sst_retencao_verificada_em"] = agora
 
 APP = Path(__file__).with_name("app.py")
@@ -53,6 +65,11 @@ if not APP.exists():
     raise FileNotFoundError("app.py não encontrado ao lado de sst_teste.py")
 
 codigo = APP.read_text(encoding="utf-8")
+
+# Mantém os dados de leitura da Manutenção em memória por mais tempo.
+# Toda operação de escrita já limpa esses caches explicitamente.
+codigo = codigo.replace("@st.cache_data(ttl=12, show_spinner=False)", "@st.cache_data(ttl=30, show_spinner=False)")
+codigo = codigo.replace("@st.cache_data(ttl=10, show_spinner=False)", "@st.cache_data(ttl=30, show_spinner=False)")
 
 # Os nomes dos módulos ficam limpos, sem símbolos, tanto no portal quanto
 # na barra lateral. Mantemos os demais ícones apenas onde ajudam a operação.
