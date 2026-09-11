@@ -7,7 +7,7 @@ import sst_app_core as core
 
 AREAS = [
     ("▥  Visão Geral", "Visão Geral", core._render_dashboard),
-    ("●●  Colaboradores", "Colaboradores", core._render_colaboradores),
+    ("●  Colaboradores", "Colaboradores", core._render_colaboradores),
     ("◇  Controle de GHE", "Controle de GHE", core._render_ghes),
     ("◒  Gestão de Registros de EPI", "Gestão de Registros de EPI", core._render_epis),
     ("▣  Entrega de EPI", "Entrega de EPI", core._render_entregas),
@@ -29,8 +29,7 @@ def _render_menu() -> None:
     st.caption("Escolha a área que deseja acessar.")
     st.write("")
 
-    # Cards grandes em três colunas, seguindo a mesma linguagem visual da referência.
-    # O próprio card é o botão; não há texto repetido nem setas.
+    # O próprio botão é o card: ícone grande à esquerda, nome forte e sem seta.
     with st.container(key="sst_menu_cards"):
         cols = st.columns(3)
         for indice, (rotulo, nome, _) in enumerate(AREAS):
