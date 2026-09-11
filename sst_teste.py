@@ -83,20 +83,38 @@ def _compilar_app():
         "from sst_entry import renderizar_modulo_sst",
     )
 
+    # A Manutenção é um módulo do Copa Gestão: volta ao portal e não exibe logout interno.
     codigo = codigo.replace(
         '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n'
         '    st.title("Ordens de Serviço")',
-        '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n\n'
+        '    st.caption("Copa Gestão  ›  Manutenção")\n\n'
         '    if st.button("← Voltar ao menu principal", use_container_width=False, key="voltar_portal_manutencao"):\n'
         '        navegar("Portal")\n'
         '        st.rerun()\n\n'
-        '    st.title("Ordens de Serviço")',
+        '    st.title("Manutenção")',
     )
     codigo = codigo.replace(
         '    # Navegação principal também fica no corpo da página para funcionar bem no celular,\n'
         '    # onde a barra lateral do Streamlit pode ficar recolhida/oculta.\n'
         '    opcoes.append(("🚪 Sair / Logout", "Logout"))\n\n',
         '',
+    )
+
+    # Menu da Manutenção no mesmo padrão visual do SST: cards grandes em três colunas.
+    codigo = codigo.replace(
+        '    cols = st.columns(2)\n'
+        '    for i, (rotulo, destino) in enumerate(opcoes):\n'
+        '        with cols[i % 2]:\n'
+        '            if destino == "Logout":\n'
+        '                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=logout_callback)\n'
+        '            else:\n'
+        '                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))',
+        '    st.caption("Escolha a área que deseja acessar.")\n'
+        '    with st.container(key="manutencao_menu_cards"):\n'
+        '        cols = st.columns(3)\n'
+        '        for i, (rotulo, destino) in enumerate(opcoes):\n'
+        '            with cols[i % 3]:\n'
+        '                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))',
     )
 
     return compile(codigo, str(APP), "exec")
