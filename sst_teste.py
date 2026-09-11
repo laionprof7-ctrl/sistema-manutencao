@@ -14,8 +14,7 @@ from copa_brand import instalar_tema_apos_page_config
 
 instalar_tema_apos_page_config()
 
-# A Manutenção usa inicialização rápida e limita verificações automáticas
-# repetitivas durante a navegação normal.
+# Inicialização otimizada da Manutenção.
 try:
     import database
     from manutencao_fast_init import (
@@ -28,7 +27,7 @@ try:
 except Exception:
     pass
 
-# A pilha SST só é carregada quando o usuário realmente abre o módulo.
+# A pilha SST só é preparada quando o usuário realmente está no módulo.
 if st.session_state.get("aba_ativa") == "SST":
     try:
         import sst_database
@@ -38,21 +37,25 @@ if st.session_state.get("aba_ativa") == "SST":
     except Exception:
         pass
 
-    agora = time.time()
-    ultima = float(st.session_state.get("sst_retencao_verificada_em", 0.0))
-    if agora - ultima >= 3600:
-        try:
-            from sst_retencao import limpar_documentos_sem_assinatura_expirados
+    # A retenção não deve atrasar a abertura do menu do SST. Ela só é verificada
+    # nas áreas em que documentos/assinaturas são efetivamente consultados.
+    area_sst = st.session_state.get("sst_area_ativa")
+    if area_sst in {"Documentações SST", "Assinaturas de Documentos"}:
+        agora = time.time()
+        ultima = float(st.session_state.get("sst_retencao_verificada_em", 0.0))
+        if agora - ultima >= 3600:
+            try:
+                from sst_retencao import limpar_documentos_sem_assinatura_expirados
 
-            resultado = limpar_documentos_sem_assinatura_expirados()
-            st.session_state["sst_retencao_verificada_em"] = agora
-            if resultado.get("removidos"):
-                st.session_state["sst_mensagem"] = (
-                    f"{resultado['removidos']} documento(s) sem assinatura há 7 dias "
-                    "foram removidos automaticamente."
-                )
-        except Exception:
-            st.session_state["sst_retencao_verificada_em"] = agora
+                resultado = limpar_documentos_sem_assinatura_expirados()
+                st.session_state["sst_retencao_verificada_em"] = agora
+                if resultado.get("removidos"):
+                    st.session_state["sst_mensagem"] = (
+                        f"{resultado['removidos']} documento(s) sem assinatura há 7 dias "
+                        "foram removidos automaticamente."
+                    )
+            except Exception:
+                st.session_state["sst_retencao_verificada_em"] = agora
 
 APP = Path(__file__).with_name("app.py")
 
@@ -65,6 +68,8 @@ def _compilar_app():
     """Lê, ajusta e compila app.py uma única vez por processo/deploy."""
     codigo = APP.read_text(encoding="utf-8")
 
+    # Leituras de tela reutilizam cache por 60 segundos. Ações de escrita já
+    # limpam os caches imediatamente no app.py.
     codigo = codigo.replace(
         "@st.cache_data(ttl=12, show_spinner=False)",
         "@st.cache_data(ttl=60, show_spinner=False)",
@@ -74,13 +79,66 @@ def _compilar_app():
         "@st.cache_data(ttl=60, show_spinner=False)",
     )
 
+    # Portal principal sem emojis nos nomes dos módulos.
     codigo = codigo.replace('"🔧 Manutenção"', '"Manutenção"')
     codigo = codigo.replace('"🦺 Segurança do Trabalho"', '"Segurança do Trabalho"')
 
-    # No ambiente de desenvolvimento, o SST usa o novo menu modular.
+    # O SST usa o menu modular otimizado.
     codigo = codigo.replace(
         "from sst_app import renderizar_modulo_sst",
         "from sst_entry import renderizar_modulo_sst",
+    )
+
+    # Ao entrar novamente no SST, sempre começa pelo menu do módulo. Ao sair
+    # para o Portal também limpamos qualquer subárea antiga da sessão.
+    codigo = codigo.replace(
+        'def navegar(destino: str):\n    st.session_state.aba_ativa = destino',
+        'def navegar(destino: str):\n'
+        '    atual = st.session_state.get("aba_ativa")\n'
+        '    if destino == "Portal" or (destino == "SST" and atual != "SST"):\n'
+        '        st.session_state.pop("sst_area_ativa", None)\n'
+        '        st.session_state.pop("sst_assinatura_documento", None)\n'
+        '        st.session_state.pop("sst_bio_sign_request", None)\n'
+        '    st.session_state.aba_ativa = destino',
+    )
+
+    # Portal: substitui o título textual pela logo centralizada.
+    codigo = codigo.replace(
+        'if aba == "Portal":\n'
+        '    st.title("Copa Gestão")\n'
+        '    st.caption(f"Bem-vindo, {user_data[\'nome\']}. Escolha o módulo que deseja acessar.")',
+        'if aba == "Portal":\n'
+        '    if logo_img:\n'
+        '        _, logo_col, _ = st.columns([1, 0.58, 1])\n'
+        '        with logo_col:\n'
+        '            st.image(logo_img, use_container_width=True)\n'
+        '    st.caption(f"Bem-vindo, {user_data[\'nome\']}. Escolha o módulo que deseja acessar.")',
+    )
+
+    # Logout discreto no fim do Portal principal.
+    codigo = codigo.replace(
+        '        st.caption("GHE, colaboradores, EPIs, entregas, documentos e assinaturas.")\n'
+        '    st.stop()',
+        '        st.caption("GHE, colaboradores, EPIs, entregas, documentos e assinaturas.")\n'
+        '    st.write("")\n'
+        '    st.divider()\n'
+        '    _, sair_col, _ = st.columns([1, 0.42, 1])\n'
+        '    with sair_col:\n'
+        '        st.button("Sair / Logout", use_container_width=True, on_click=logout_callback, key="portal_logout")\n'
+        '    st.stop()',
+        1,
+    )
+
+    # No menu do SST existe retorno ao Portal. Dentro de um submódulo o retorno
+    # correto é apenas para o menu de Segurança do Trabalho.
+    codigo = codigo.replace(
+        '    if st.button("← Voltar ao menu principal", use_container_width=False, key="voltar_portal_sst"):\n'
+        '        navegar("Portal")\n'
+        '        st.rerun()',
+        '    if not st.session_state.get("sst_area_ativa"):\n'
+        '        if st.button("← Voltar ao menu principal", use_container_width=False, key="voltar_portal_sst"):\n'
+        '            navegar("Portal")\n'
+        '            st.rerun()',
     )
 
     # A Manutenção é um módulo do Copa Gestão: volta ao portal e não exibe logout interno.
@@ -100,8 +158,7 @@ def _compilar_app():
         '',
     )
 
-    # Os textos dos cards ficam limpos. Os ícones são desenhados pelo mesmo CSS
-    # verde usado no SST, reutilizando os sete estilos já aprovados.
+    # Textos dos cards da Manutenção sem emoji; os ícones são desenhados no CSS.
     substituicoes_menu = {
         "📝 Abrir Ordem de Serviço": "Abrir Ordem de Serviço",
         "🔍 Consultar Ordens de Serviço": "Consultar Ordens de Serviço",
@@ -114,9 +171,7 @@ def _compilar_app():
     for antigo, novo in substituicoes_menu.items():
         codigo = codigo.replace(antigo, novo)
 
-    # Menu da Manutenção em três colunas. As chaves dos botões reaproveitam os
-    # mesmos desenhos do SST. O CSS local abaixo ativa o pseudo-elemento do ícone
-    # também dentro do container da Manutenção.
+    # Menu da Manutenção em três colunas e com os mesmos ícones do padrão SST.
     codigo = codigo.replace(
         '    cols = st.columns(2)\n'
         '    for i, (rotulo, destino) in enumerate(opcoes):\n'
@@ -126,23 +181,6 @@ def _compilar_app():
         '            else:\n'
         '                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))',
         '    st.caption("Escolha a área que deseja acessar.")\n'
-        '    st.markdown("""\n'
-        '    <style>\n'
-        '    .st-key-manutencao_menu_cards button {\n'
-        '        display:flex !important; align-items:center !important; justify-content:flex-start !important;\n'
-        '        gap:1.45rem !important; text-align:left !important;\n'
-        '    }\n'
-        '    .st-key-manutencao_menu_cards button::before {\n'
-        '        content:""; display:block; flex:0 0 76px; width:76px; height:76px;\n'
-        '        background:linear-gradient(180deg,#14875b 0%,#005b46 100%);\n'
-        '        -webkit-mask-position:center; mask-position:center;\n'
-        '        -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;\n'
-        '        -webkit-mask-size:contain; mask-size:contain;\n'
-        '    }\n'
-        '    @media (max-width:900px){.st-key-manutencao_menu_cards button::before{flex-basis:58px;width:58px;height:58px}}\n'
-        '    @media (max-width:768px){.st-key-manutencao_menu_cards button::before{flex-basis:44px;width:44px;height:44px}}\n'
-        '    </style>\n'
-        '    """, unsafe_allow_html=True)\n'
         '    icones_menu = {\n'
         '        "Abrir Chamado": 4,\n'
         '        "Consultar Chamados": 5,\n'
