@@ -6,13 +6,13 @@ import sst_app_core as core
 
 
 AREAS = [
-    ("Visão Geral", core._render_dashboard),
-    ("Colaboradores", core._render_colaboradores),
-    ("Controle de GHE", core._render_ghes),
-    ("Gestão de Registros de EPI", core._render_epis),
-    ("Entrega de EPI", core._render_entregas),
-    ("Documentações SST", core._render_documentos),
-    ("Assinaturas de Documentos", core._render_assinaturas),
+    ("▥  Visão Geral", "Visão Geral", core._render_dashboard),
+    ("●●  Colaboradores", "Colaboradores", core._render_colaboradores),
+    ("◇  Controle de GHE", "Controle de GHE", core._render_ghes),
+    ("◒  Gestão de Registros de EPI", "Gestão de Registros de EPI", core._render_epis),
+    ("▣  Entrega de EPI", "Entrega de EPI", core._render_entregas),
+    ("▤  Documentações SST", "Documentações SST", core._render_documentos),
+    ("✎  Assinaturas de Documentos", "Assinaturas de Documentos", core._render_assinaturas),
 ]
 
 
@@ -26,21 +26,22 @@ def _voltar_menu() -> None:
 
 
 def _render_menu() -> None:
-    # O cabeçalho do módulo já exibe "Segurança do Trabalho" acima.
-    # Aqui deixamos apenas a orientação e os botões para evitar repetição visual.
     st.caption("Escolha a área que deseja acessar.")
     st.write("")
 
-    cols = st.columns(2)
-    for indice, (nome, _) in enumerate(AREAS):
-        with cols[indice % 2]:
-            st.button(
-                nome,
-                key=f"sst_menu_{indice}",
-                use_container_width=True,
-                on_click=_abrir_area,
-                args=(nome,),
-            )
+    # Cards grandes em três colunas, seguindo a mesma linguagem visual da referência.
+    # O próprio card é o botão; não há texto repetido nem setas.
+    with st.container(key="sst_menu_cards"):
+        cols = st.columns(3)
+        for indice, (rotulo, nome, _) in enumerate(AREAS):
+            with cols[indice % 3]:
+                st.button(
+                    rotulo,
+                    key=f"sst_menu_{indice}",
+                    use_container_width=True,
+                    on_click=_abrir_area,
+                    args=(nome,),
+                )
 
 
 def renderizar_modulo_sst_menu(actor: dict) -> None:
@@ -61,14 +62,12 @@ def renderizar_modulo_sst_menu(actor: dict) -> None:
         _render_menu()
         return
 
-    mapa = {nome: render for nome, render in AREAS}
+    mapa = {nome: render for _, nome, render in AREAS}
     render = mapa.get(area_ativa)
     if render is None:
         _voltar_menu()
         st.rerun()
 
-    # A preparação do banco só é necessária ao entrar numa área operacional.
-    # O menu inicial permanece leve e não dispara consultas de negócio.
     core._inicializar_sst_uma_vez()
 
     st.caption(f"Segurança do Trabalho  ›  {area_ativa}")
