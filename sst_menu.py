@@ -6,13 +6,13 @@ import sst_app_core as core
 
 
 AREAS = [
-    ("▥  Visão Geral", "Visão Geral", core._render_dashboard),
-    ("●  Colaboradores", "Colaboradores", core._render_colaboradores),
-    ("◇  Controle de GHE", "Controle de GHE", core._render_ghes),
-    ("◒  Gestão de Registros de EPI", "Gestão de Registros de EPI", core._render_epis),
-    ("▣  Entrega de EPI", "Entrega de EPI", core._render_entregas),
-    ("▤  Documentações SST", "Documentações SST", core._render_documentos),
-    ("✎  Assinaturas de Documentos", "Assinaturas de Documentos", core._render_assinaturas),
+    ("Visão Geral", "Visão Geral", core._render_dashboard),
+    ("Colaboradores", "Colaboradores", core._render_colaboradores),
+    ("Controle de GHE", "Controle de GHE", core._render_ghes),
+    ("Gestão de Registros de EPI", "Gestão de Registros de EPI", core._render_epis),
+    ("Entrega de EPI", "Entrega de EPI", core._render_entregas),
+    ("Documentações SST", "Documentações SST", core._render_documentos),
+    ("Assinaturas de Documentos", "Assinaturas de Documentos", core._render_assinaturas),
 ]
 
 
@@ -29,7 +29,8 @@ def _render_menu() -> None:
     st.caption("Escolha a área que deseja acessar.")
     st.write("")
 
-    # O próprio botão é o card: ícone grande à esquerda, nome forte e sem seta.
+    # O ícone de cada área é desenhado pelo tema global em CSS para manter
+    # o padrão visual verde, grande e consistente da referência aprovada.
     with st.container(key="sst_menu_cards"):
         cols = st.columns(3)
         for indice, (rotulo, nome, _) in enumerate(AREAS):
