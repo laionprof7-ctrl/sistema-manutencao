@@ -61,20 +61,32 @@ def aplicar_tema_global() -> None:
             border-right: 1px solid var(--copa-line);
         }}
         [data-testid="stSidebar"] img {{
-            max-width: 190px;
+            max-width: 200px;
             margin: .3rem auto 1rem;
         }}
 
         h1, h2, h3 {{ color: var(--copa-ink) !important; letter-spacing: -.025em; }}
         h1 {{ font-weight: 800 !important; }}
         h2, h3 {{ font-weight: 750 !important; }}
-        p, label, .stCaption {{ color: #405950; }}
+
+        .block-container p,
+        .block-container label,
+        .block-container [data-testid="stMarkdownContainer"] p {{
+            color: #405950;
+            font-size: 1.045rem !important;
+            line-height: 1.52 !important;
+        }}
+        [data-testid="stCaptionContainer"] p,
+        .stCaption {{
+            font-size: .96rem !important;
+            line-height: 1.45 !important;
+        }}
 
         div.stButton > button,
         div.stDownloadButton > button {{
             border-radius: 12px !important;
-            min-height: 46px;
-            font-size: .98rem !important;
+            min-height: 48px;
+            font-size: 1.03rem !important;
             font-weight: 750 !important;
             border: 1px solid rgba(8,123,79,.20) !important;
             transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
@@ -86,7 +98,6 @@ def aplicar_tema_global() -> None:
             box-shadow: 0 7px 18px rgba(8,123,79,.13);
         }}
 
-        /* Botões principais do portal: alto contraste e proporção de módulo. */
         button[data-testid="stBaseButton-primary"],
         div.stButton > button[kind="primary"] {{
             background: linear-gradient(135deg, #07965d, var(--copa-green-dark)) !important;
@@ -123,6 +134,7 @@ def aplicar_tema_global() -> None:
             padding: 14px 16px !important;
             box-shadow: 0 7px 18px rgba(0,61,49,.055);
         }}
+        [data-testid="stMetricLabel"] p {{ font-size: 1rem !important; font-weight: 700 !important; }}
         [data-testid="stMetricValue"] {{ color: var(--copa-green-dark) !important; font-weight: 800 !important; }}
 
         [data-testid="stExpander"],
@@ -131,6 +143,7 @@ def aplicar_tema_global() -> None:
             border-radius: 14px !important;
             background: rgba(255,255,255,.76);
         }}
+        [data-testid="stExpander"] summary p {{ font-size: 1.03rem !important; }}
 
         [data-testid="stDataFrame"] {{
             border: 1px solid var(--copa-line);
@@ -139,8 +152,9 @@ def aplicar_tema_global() -> None:
         }}
 
         .stTextInput input, .stNumberInput input, .stTextArea textarea,
-        [data-baseweb="select"] > div {{
+        .stDateInput input, [data-baseweb="select"] > div {{
             border-radius: 10px !important;
+            font-size: 1.03rem !important;
         }}
         .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {{
             border-color: var(--copa-green) !important;
@@ -159,6 +173,8 @@ def aplicar_tema_global() -> None:
             }}
             h1 {{ font-size: 1.85rem !important; }}
             h2 {{ font-size: 1.45rem !important; }}
+            .block-container p,
+            .block-container label {{ font-size: .98rem !important; }}
             button[data-testid="stBaseButton-primary"],
             div.stButton > button[kind="primary"] {{
                 min-height: 58px !important;
