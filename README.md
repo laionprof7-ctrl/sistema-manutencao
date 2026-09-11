@@ -25,7 +25,7 @@ services.py         Regras de negócio, autorização e auditoria
 database.py         Banco, tabelas, transações e consultas
 security.py         Senhas, validação e compatibilidade com hashes legados
 permissions.py      Matriz de permissões
-reports.py          Relatórios Word
+reports.py          Relatórios PDF
 create_admin.py     Criação segura do administrador inicial
 migrate_csv.py      Migração dos CSVs antigos
 config.py           Configurações
@@ -82,12 +82,11 @@ python -m py_compile *.py
 
 ## Arquivos opcionais
 
-Para manter identidade visual e papel timbrado, coloque na raiz do projeto:
+Para manter a identidade visual nos relatórios, coloque na raiz do projeto:
 
 - `logo.png`
-- `8. Papel Timbrado.docx`
 
-Se o papel timbrado não existir, o relatório Word ainda é gerado em documento padrão.
+Se o logo não existir, o relatório PDF ainda é gerado normalmente.
 
 ## Observação de produção
 
