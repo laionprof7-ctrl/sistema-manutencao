@@ -37,8 +37,6 @@ def _setting(nome: str, padrao: str) -> str:
 
 APP_ENV = _setting("APP_ENV", "development").strip().lower()
 SESSION_IDLE_MINUTES = int(_setting("SESSION_IDLE_MINUTES", "60"))
-MAX_LOGIN_ATTEMPTS = int(_setting("MAX_LOGIN_ATTEMPTS", "5"))
-LOGIN_LOCK_MINUTES = int(_setting("LOGIN_LOCK_MINUTES", "10"))
 
 
 def get_database_url() -> str:

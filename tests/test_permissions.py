@@ -1,4 +1,11 @@
-from permissions import *
+from permissions import (
+    pode_conceder_nivel,
+    pode_editar_usuario,
+    pode_gerir_os,
+    pode_gerir_usuarios,
+    pode_triagem,
+    pode_ver_oficina,
+)
 
 
 def test_permissoes_basicas():

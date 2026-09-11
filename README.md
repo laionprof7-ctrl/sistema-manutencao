@@ -12,7 +12,7 @@ Versão de produção do sistema de ordens de serviço da Copa Ambiental.
 - Controle de concorrência otimista por versão para impedir que duas pessoas sobrescrevam a mesma OS sem perceber.
 - Exclusão lógica de OS e desativação de usuários para preservar histórico e rastreabilidade.
 - Datas salvas em UTC e exibidas no horário da Bahia/Brasil.
-- Timeout de sessão e limitação de tentativas de login por sessão.
+- Timeout de sessão por inatividade, sem bloqueio por quantidade de tentativas de login.
 - Restrições e índices no banco para status, prioridade, placa e datas.
 - Testes automatizados básicos.
 - Migração dos CSVs legados.
@@ -25,7 +25,7 @@ services.py         Regras de negócio, autorização e auditoria
 database.py         Banco, tabelas, transações e consultas
 security.py         Senhas, validação e compatibilidade com hashes legados
 permissions.py      Matriz de permissões
-reports.py          Relatórios Word
+reports.py          Relatórios PDF
 create_admin.py     Criação segura do administrador inicial
 migrate_csv.py      Migração dos CSVs antigos
 config.py           Configurações
@@ -82,12 +82,11 @@ python -m py_compile *.py
 
 ## Arquivos opcionais
 
-Para manter identidade visual e papel timbrado, coloque na raiz do projeto:
+Para manter a identidade visual nos relatórios, coloque na raiz do projeto:
 
 - `logo.png`
-- `8. Papel Timbrado.docx`
 
-Se o papel timbrado não existir, o relatório Word ainda é gerado em documento padrão.
+Se o logo não existir, o relatório PDF ainda é gerado normalmente.
 
 ## Observação de produção
 

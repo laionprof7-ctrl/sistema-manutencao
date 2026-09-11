@@ -8,7 +8,7 @@ import streamlit as st
 from PIL import Image
 
 from config import (
-    ARQUIVO_LOGO, FUSO_BR, NIVEIS,
+    ARQUIVO_LOGO, NIVEIS,
     PRIORIDADES, SESSION_IDLE_MINUTES, VEICULOS,
 )
 from database import (
@@ -189,7 +189,15 @@ if not st.session_state.logged_in:
             if valido:
                 if upgrade:
                     with transacao() as conn:
-                        conn.execute(update(USUARIOS).where(USUARIOS.c.usuario == usuario).values(senha=hash_senha(senha), atualizado_em=utcnow()))
+                        conn.execute(
+                            update(USUARIOS)
+                            .where(
+                                (USUARIOS.c.usuario == usuario)
+                                & (USUARIOS.c.senha == dados["senha"])
+                                & (USUARIOS.c.ativo == True)
+                            )
+                            .values(senha=hash_senha(senha), atualizado_em=utcnow())
+                        )
                 st.session_state.logged_in = True
                 st.session_state.user_info = obter_usuario(usuario)
                 st.session_state.aba_ativa = "Menu"
@@ -307,9 +315,9 @@ if aba == "Consultar Chamados":
     if busca.strip():
         q = busca.strip()
         df = df[
-            df["Placa"].astype(str).str.contains(q, case=False, na=False)
-            | df["ID_OS"].astype(str).str.contains(q, case=False, na=False)
-            | df["Veiculo"].astype(str).str.contains(q, case=False, na=False)
+            df["Placa"].astype(str).str.contains(q, case=False, na=False, regex=False)
+            | df["ID_OS"].astype(str).str.contains(q, case=False, na=False, regex=False)
+            | df["Veiculo"].astype(str).str.contains(q, case=False, na=False, regex=False)
         ]
     if filtro_status != "Todos": df = df[df["Status"] == filtro_status]
 
@@ -375,7 +383,7 @@ if aba == "Consultar Chamados":
             with c2:
                 confirma = st.checkbox("Confirmo a remoção desta OS", key=f"del_{row.id}")
                 if st.button("🗑️ Remover da operação", disabled=not confirma, use_container_width=True):
-                    ok, _ = executar(excluir_chamado, user_data, row.id)
+                    ok, _ = executar(excluir_chamado, user_data, row.id, row.Versao)
                     if ok: st.rerun()
     st.stop()
 
@@ -500,8 +508,8 @@ if aba == "Oficina":
         with f3: fp = st.text_input("Placa / ID", key="hist_p")
         hist = df_os.copy()
         if fs != "Todos": hist = hist[hist["Status"] == fs]
-        if fm.strip(): hist = hist[hist["Mecanico_Responsavel"].astype(str).str.contains(fm, case=False, na=False)]
-        if fp.strip(): hist = hist[hist["Placa"].astype(str).str.contains(fp, case=False, na=False) | hist["ID_OS"].astype(str).str.contains(fp, case=False, na=False)]
+        if fm.strip(): hist = hist[hist["Mecanico_Responsavel"].astype(str).str.contains(fm, case=False, na=False, regex=False)]
+        if fp.strip(): hist = hist[hist["Placa"].astype(str).str.contains(fp, case=False, na=False, regex=False) | hist["ID_OS"].astype(str).str.contains(fp, case=False, na=False, regex=False)]
         st.dataframe(hist[["ID_OS", "Data", "Veiculo", "Placa", "Status", "Prioridade", "Mecanico_Responsavel", "Data_Liberacao"]], use_container_width=True, hide_index=True)
     st.stop()
 

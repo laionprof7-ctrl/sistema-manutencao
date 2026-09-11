@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
-from database import AUDITORIA, CHAMADOS, CONTADORES, USUARIOS, registrar_auditoria, transacao, utcnow
+from database import CHAMADOS, CONTADORES, USUARIOS, registrar_auditoria, transacao, utcnow
 from permissions import pode_conceder_nivel, pode_editar_usuario, pode_gerir_os, pode_gerir_usuarios, pode_triagem, pode_ver_oficina
-from security import hash_senha, usuario_valido, validar_senha_forte, verificar_senha
+from security import hash_senha, normalizar_usuario, usuario_valido, validar_senha_forte, verificar_senha
 
 class RegraNegocioError(ValueError):
     pass
@@ -19,6 +19,7 @@ def _usuario(conn, usuario: str):
 
 
 def criar_usuario(actor: dict, usuario: str, senha: str, nome: str, nivel: float) -> None:
+    usuario = normalizar_usuario(usuario)
     if not pode_gerir_usuarios(float(actor["nivel"])):
         raise RegraNegocioError("Sem permissão para criar usuários.")
     if not pode_conceder_nivel(float(actor["nivel"]), float(nivel)):
@@ -28,6 +29,8 @@ def criar_usuario(actor: dict, usuario: str, senha: str, nome: str, nivel: float
     partes = [p for p in nome.strip().split() if p]
     if len(partes) < 2:
         raise RegraNegocioError("Digite nome e sobrenome.")
+    if len(" ".join(partes)) > 160:
+        raise RegraNegocioError("O nome excede o tamanho permitido.")
     ok, msg = validar_senha_forte(senha)
     if not ok:
         raise RegraNegocioError(msg)
@@ -47,6 +50,8 @@ def alterar_nome(actor: dict, alvo: str, novo_nome: str) -> None:
     partes = [p for p in novo_nome.strip().split() if p]
     if len(partes) < 2:
         raise RegraNegocioError("Digite nome e sobrenome.")
+    if len(" ".join(partes)) > 160:
+        raise RegraNegocioError("O nome excede o tamanho permitido.")
     with transacao() as conn:
         row = _usuario(conn, alvo)
         if not row:
@@ -224,6 +229,8 @@ def atualizar_oficina(actor: dict, id_interno: int, novo_status: str, mecanico: 
             informado = atual
         elif len(informado) < 3:
             raise RegraNegocioError("Informe o mecânico responsável.")
+        if len(informado) > 160:
+            raise RegraNegocioError("O nome do mecânico excede o tamanho permitido.")
 
         liberacao = row["data_liberacao"]
         if novo_status == "Concluído" and liberacao is None:
@@ -258,12 +265,25 @@ def arquivar_chamado(actor: dict, id_interno: int, arquivar: bool, versao: int) 
         registrar_auditoria(conn, actor["usuario"], "OS_ARQUIVADA" if arquivar else "OS_DESARQUIVADA", "chamado", row["id_os"])
 
 
-def excluir_chamado(actor: dict, id_interno: int) -> None:
+def excluir_chamado(actor: dict, id_interno: int, versao: int) -> None:
     if not pode_gerir_os(float(actor["nivel"])):
         raise RegraNegocioError("Sem permissão para excluir chamados.")
     with transacao() as conn:
         row = _chamado(conn, id_interno)
         if not row:
             raise RegraNegocioError("Chamado não encontrado.")
-        conn.execute(update(CHAMADOS).where(CHAMADOS.c.id == id_interno).values(excluido=True, excluido_em=utcnow(), excluido_por=actor["usuario"], atualizado_em=utcnow(), versao=CHAMADOS.c.versao + 1))
+        result = conn.execute(
+            update(CHAMADOS)
+            .where(
+                (CHAMADOS.c.id == id_interno)
+                & (CHAMADOS.c.versao == int(versao))
+                & (CHAMADOS.c.excluido == False)
+            )
+            .values(
+                excluido=True, excluido_em=utcnow(), excluido_por=actor["usuario"],
+                atualizado_em=utcnow(), versao=CHAMADOS.c.versao + 1,
+            )
+        )
+        if result.rowcount != 1:
+            raise ConcorrenciaError("Esse chamado foi alterado por outra pessoa. Atualize a tela.")
         registrar_auditoria(conn, actor["usuario"], "OS_EXCLUIDA_LOGICAMENTE", "chamado", row["id_os"], f"placa={row['placa']}")
