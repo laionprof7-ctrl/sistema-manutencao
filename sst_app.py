@@ -9,7 +9,7 @@ from PIL import Image
 
 from config import (
     ARQUIVO_LOGO, FUSO_BR, NIVEIS,
-    PRIORIDADES, VEICULOS,
+    PRIORIDADES, SESSION_IDLE_MINUTES, VEICULOS,
 )
 from database import (
     inicializar_banco, listar_auditoria, listar_chamados, listar_usuarios, resumo_chamados,
@@ -110,31 +110,16 @@ def _init_state():
         "logged_in": False,
         "user_info": None,
         "aba_ativa": "Menu",
-        "user_checked_at": 0.0,
         "session_expires_at": None,
-        "session_warning_shown": False,
+        "user_checked_at": 0.0,
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
 
 
-def _iniciar_ou_renovar_sessao() -> None:
+def iniciar_sessao():
+    """Inicia uma sessão fixa de 1 hora. A navegação não renova este prazo."""
     st.session_state.session_expires_at = time.time() + SESSION_DURATION_SECONDS
-    st.session_state.session_warning_shown = False
-
-
-def _segundos_restantes_sessao() -> int:
-    expira_em = st.session_state.get("session_expires_at")
-    if not expira_em:
-        return 0
-    return max(0, int(float(expira_em) - time.time()))
-
-
-def _formatar_tempo_sessao(segundos: int) -> str:
-    segundos = max(0, int(segundos))
-    horas, resto = divmod(segundos, 3600)
-    minutos, segundos = divmod(resto, 60)
-    return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
 
 
 def sair(mensagem: str | None = None):
@@ -142,51 +127,23 @@ def sair(mensagem: str | None = None):
     st.session_state.user_info = None
     st.session_state.aba_ativa = "Menu"
     st.session_state.session_expires_at = None
-    st.session_state.session_warning_shown = False
     if mensagem:
         st.session_state["logout_message"] = mensagem
     st.rerun()
 
 
-def validar_sessao() -> None:
-    if st.session_state.logged_in and _segundos_restantes_sessao() <= 0:
-        sair("Sua sessão expirou. Entre novamente para continuar.")
+def segundos_restantes_sessao() -> int:
+    expira_em = st.session_state.get("session_expires_at")
+    if not expira_em:
+        iniciar_sessao()
+        expira_em = st.session_state.session_expires_at
+    return max(0, int(float(expira_em) - time.time()))
 
 
-@st.dialog("Sua sessão está terminando", dismissible=False)
-def _popup_renovar_sessao() -> None:
-    restante = _segundos_restantes_sessao()
-    st.warning(
-        f"Sua sessão expira em **{_formatar_tempo_sessao(restante)}**. "
-        "Deseja continuar conectado?"
-    )
-    st.caption("Por segurança, a sessão não é renovada automaticamente pelo uso do sistema.")
-
-    c1, c2 = st.columns(2)
-    if c1.button("Renovar por mais 1 hora", type="primary", use_container_width=True, key="renovar_sessao_1h"):
-        _iniciar_ou_renovar_sessao()
-        st.rerun()
-    if c2.button("Sair agora", use_container_width=True, key="encerrar_sessao_agora"):
-        sair("Sessão encerrada com segurança.")
-
-
-@st.fragment(run_every=1)
-def _contador_sessao() -> None:
-    if not st.session_state.logged_in:
-        return
-
-    restante = _segundos_restantes_sessao()
-    if restante <= 0:
-        sair("Sua sessão expirou. Entre novamente para continuar.")
-
-    texto = _formatar_tempo_sessao(restante)
-    if restante <= SESSION_WARNING_SECONDS:
-        st.warning(f"⏱️ Sessão: {texto}")
-        if not st.session_state.get("session_warning_shown", False):
-            st.session_state.session_warning_shown = True
-            _popup_renovar_sessao()
-    else:
-        st.caption(f"⏱️ Sessão: {texto}")
+def formatar_tempo_sessao(segundos: int) -> str:
+    horas, resto = divmod(max(0, segundos), 3600)
+    minutos, segundos = divmod(resto, 60)
+    return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
 
 
 def recarregar_usuario_logado(forcar: bool = False):
@@ -219,7 +176,6 @@ def executar(acao, *args, sucesso: str | None = None, **kwargs):
 
 
 _init_state()
-validar_sessao()
 
 # ---------- Login ----------
 if not st.session_state.logged_in:
@@ -251,8 +207,8 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.user_info = obter_usuario(usuario)
                 st.session_state.aba_ativa = "Menu"
+                iniciar_sessao()
                 st.session_state.user_checked_at = time.time()
-                _iniciar_ou_renovar_sessao()
                 st.rerun()
             st.error("Usuário ou senha incorretos.")
     st.stop()
@@ -264,6 +220,34 @@ nivel_user = float(user_data["nivel"])
 usuario_atual = str(user_data["usuario"])
 
 
+@st.dialog("Sua sessão está terminando")
+def aviso_expiracao_sessao():
+    restante = segundos_restantes_sessao()
+    st.warning(
+        f"Sua sessão expira em **{formatar_tempo_sessao(restante)}**. "
+        "Deseja continuar conectado?"
+    )
+    c1, c2 = st.columns(2)
+    if c1.button("🔄 Renovar por mais 1 hora", type="primary", use_container_width=True):
+        iniciar_sessao()
+        st.rerun()
+    if c2.button("🚪 Sair agora", use_container_width=True):
+        sair("Sessão encerrada.")
+
+
+@st.fragment(run_every=1)
+def controle_visual_sessao():
+    restante = segundos_restantes_sessao()
+
+    if restante <= 0:
+        sair("Sua sessão expirou. Entre novamente.")
+
+    st.sidebar.caption(f"⏱️ Sessão restante: **{formatar_tempo_sessao(restante)}**")
+
+    if restante <= SESSION_WARNING_SECONDS:
+        aviso_expiracao_sessao()
+
+
 def navegar(destino: str):
     st.session_state.aba_ativa = destino
 
@@ -273,14 +257,12 @@ def logout_callback():
     st.session_state.user_info = None
     st.session_state.aba_ativa = "Menu"
     st.session_state.session_expires_at = None
-    st.session_state.session_warning_shown = False
 
 if logo_img:
     st.sidebar.image(logo_img, use_container_width=True)
 st.sidebar.write(f"👤 **{user_data['nome']}**")
 st.sidebar.caption(f"{NIVEIS.get(nivel_user, 'Nível')} · acesso {nivel_user:g}")
-with st.sidebar:
-    _contador_sessao()
+controle_visual_sessao()
 st.sidebar.divider()
 st.sidebar.button("🏠 Menu Principal", use_container_width=True, on_click=navegar, args=("Menu",))
 st.sidebar.button("🚪 Sair", use_container_width=True, on_click=logout_callback)
