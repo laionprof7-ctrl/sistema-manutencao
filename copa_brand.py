@@ -73,8 +73,9 @@ def aplicar_tema_global() -> None:
         div.stButton > button,
         div.stDownloadButton > button {{
             border-radius: 12px !important;
-            min-height: 44px;
-            font-weight: 700 !important;
+            min-height: 46px;
+            font-size: .98rem !important;
+            font-weight: 750 !important;
             border: 1px solid rgba(8,123,79,.20) !important;
             transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
         }}
@@ -87,8 +88,16 @@ def aplicar_tema_global() -> None:
         button[data-testid="stBaseButton-primary"],
         div.stButton > button[kind="primary"] {{
             background: linear-gradient(135deg, var(--copa-green), var(--copa-green-dark)) !important;
-            color: #fff !important;
+            color: #ffffff !important;
             border-color: transparent !important;
+        }}
+        button[data-testid="stBaseButton-primary"] *,
+        div.stButton > button[kind="primary"] *,
+        button[data-testid="stBaseButton-primary"] p,
+        div.stButton > button[kind="primary"] p {{
+            color: #ffffff !important;
+            opacity: 1 !important;
+            font-weight: 800 !important;
         }}
 
         [data-testid="stMetric"] {{
