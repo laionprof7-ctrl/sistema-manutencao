@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from functools import lru_cache
 from pathlib import Path
 
 import streamlit as st
@@ -9,7 +10,9 @@ BASE_DIR = Path(__file__).resolve().parent
 BACKGROUND_PATH = BASE_DIR / "assets" / "copa_background.webp"
 
 
+@lru_cache(maxsize=1)
 def _background_data_uri() -> str:
+    """Codifica o plano de fundo uma única vez por processo."""
     if not BACKGROUND_PATH.exists():
         return ""
     encoded = base64.b64encode(BACKGROUND_PATH.read_bytes()).decode("ascii")
@@ -61,7 +64,7 @@ def aplicar_tema_global() -> None:
             border-right: 1px solid var(--copa-line);
         }}
         [data-testid="stSidebar"] img {{
-            max-width: 200px;
+            max-width: 210px;
             margin: .3rem auto 1rem;
         }}
 
@@ -73,20 +76,20 @@ def aplicar_tema_global() -> None:
         .block-container label,
         .block-container [data-testid="stMarkdownContainer"] p {{
             color: #405950;
-            font-size: 1.045rem !important;
-            line-height: 1.52 !important;
+            font-size: 1.085rem !important;
+            line-height: 1.56 !important;
         }}
         [data-testid="stCaptionContainer"] p,
         .stCaption {{
-            font-size: .96rem !important;
-            line-height: 1.45 !important;
+            font-size: 1rem !important;
+            line-height: 1.48 !important;
         }}
 
         div.stButton > button,
         div.stDownloadButton > button {{
             border-radius: 12px !important;
-            min-height: 48px;
-            font-size: 1.03rem !important;
+            min-height: 49px;
+            font-size: 1.06rem !important;
             font-weight: 750 !important;
             border: 1px solid rgba(8,123,79,.20) !important;
             transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
@@ -131,10 +134,10 @@ def aplicar_tema_global() -> None:
             background: linear-gradient(180deg, #fff, #fbfdfc);
             border: 1px solid var(--copa-line) !important;
             border-radius: 16px !important;
-            padding: 14px 16px !important;
+            padding: 15px 17px !important;
             box-shadow: 0 7px 18px rgba(0,61,49,.055);
         }}
-        [data-testid="stMetricLabel"] p {{ font-size: 1rem !important; font-weight: 700 !important; }}
+        [data-testid="stMetricLabel"] p {{ font-size: 1.04rem !important; font-weight: 700 !important; }}
         [data-testid="stMetricValue"] {{ color: var(--copa-green-dark) !important; font-weight: 800 !important; }}
 
         [data-testid="stExpander"],
@@ -143,7 +146,7 @@ def aplicar_tema_global() -> None:
             border-radius: 14px !important;
             background: rgba(255,255,255,.76);
         }}
-        [data-testid="stExpander"] summary p {{ font-size: 1.03rem !important; }}
+        [data-testid="stExpander"] summary p {{ font-size: 1.06rem !important; }}
 
         [data-testid="stDataFrame"] {{
             border: 1px solid var(--copa-line);
@@ -154,7 +157,7 @@ def aplicar_tema_global() -> None:
         .stTextInput input, .stNumberInput input, .stTextArea textarea,
         .stDateInput input, [data-baseweb="select"] > div {{
             border-radius: 10px !important;
-            font-size: 1.03rem !important;
+            font-size: 1.06rem !important;
         }}
         .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {{
             border-color: var(--copa-green) !important;
@@ -174,7 +177,7 @@ def aplicar_tema_global() -> None:
             h1 {{ font-size: 1.85rem !important; }}
             h2 {{ font-size: 1.45rem !important; }}
             .block-container p,
-            .block-container label {{ font-size: .98rem !important; }}
+            .block-container label {{ font-size: 1rem !important; }}
             button[data-testid="stBaseButton-primary"],
             div.stButton > button[kind="primary"] {{
                 min-height: 58px !important;
