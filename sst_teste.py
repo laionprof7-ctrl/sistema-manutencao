@@ -9,6 +9,10 @@ da navegação, autenticação e controle de sessão.
 
 from pathlib import Path
 
+from copa_brand import instalar_tema_apos_page_config
+
+instalar_tema_apos_page_config()
+
 APP = Path(__file__).with_name("app.py")
 
 if not APP.exists():
