@@ -576,17 +576,12 @@ def _render_documentos(actor: dict) -> None:
     inicio = f5.date_input("De", value=hoje - timedelta(days=30), format="DD/MM/YYYY", disabled=not usar_periodo, key="sst_doc_inicio")
     fim = f6.date_input("Até", value=hoje, format="DD/MM/YYYY", disabled=not usar_periodo, key="sst_doc_fim")
 
-    busca = st.text_input(
-        "Busca rápida",
-        key="sst_doc_busca",
-        placeholder="Número, colaborador, matrícula, tipo, status, título ou motivo...",
-        help="A busca é combinada com os filtros acima.",
-    )
-
     # O limite é técnico e invisível para o usuário. Os documentos continuam armazenados normalmente.
+    # A busca textual foi removida da interface: os filtros estruturados acima são mais claros
+    # e suficientes para localizar os documentos no histórico.
     ok, documentos = _executar(
         _documentos_cache, 100, mapa_fc[colab_f], tipo_f, status_f,
-        inicio if usar_periodo else None, fim if usar_periodo else None, busca.strip() or None,
+        inicio if usar_periodo else None, fim if usar_periodo else None, None,
     )
     if not ok:
         return
