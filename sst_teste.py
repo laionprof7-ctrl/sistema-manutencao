@@ -100,6 +100,20 @@ def _compilar_app():
         '',
     )
 
+    # Ícones monocromáticos permitem que os cards da Manutenção usem a mesma
+    # identidade verde e elegante do menu SST.
+    substituicoes_menu = {
+        "📝 Abrir Ordem de Serviço": "▤  Abrir Ordem de Serviço",
+        "🔍 Consultar Ordens de Serviço": "⌕  Consultar Ordens de Serviço",
+        "🛠️ Painel da Oficina": "⚙  Painel da Oficina",
+        "🎯 Triagem e Prioridade": "◎  Triagem e Prioridade",
+        "👤 Gestão de Usuários": "●  Gestão de Usuários",
+        "🔑 Alterar minha senha": "◆  Alterar minha senha",
+        "🧾 Auditoria": "▥  Auditoria",
+    }
+    for antigo, novo in substituicoes_menu.items():
+        codigo = codigo.replace(antigo, novo)
+
     # Menu da Manutenção no mesmo padrão visual do SST: cards grandes em três colunas.
     codigo = codigo.replace(
         '    cols = st.columns(2)\n'
