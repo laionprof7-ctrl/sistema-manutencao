@@ -12,7 +12,7 @@ Versão de produção do sistema de ordens de serviço da Copa Ambiental.
 - Controle de concorrência otimista por versão para impedir que duas pessoas sobrescrevam a mesma OS sem perceber.
 - Exclusão lógica de OS e desativação de usuários para preservar histórico e rastreabilidade.
 - Datas salvas em UTC e exibidas no horário da Bahia/Brasil.
-- Timeout de sessão e limitação de tentativas de login por sessão.
+- Timeout de sessão por inatividade, sem bloqueio por quantidade de tentativas de login.
 - Restrições e índices no banco para status, prioridade, placa e datas.
 - Testes automatizados básicos.
 - Migração dos CSVs legados.
