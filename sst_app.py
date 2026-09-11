@@ -101,8 +101,8 @@ def limpar_cache_dados():
 preparar_banco()
 
 # ---------- Sessão ----------
-SESSION_DURATION_SECONDS = 60 * 60
-SESSION_WARNING_SECONDS = 5 * 60
+SESSION_DURATION_SECONDS = 2 * 60
+SESSION_WARNING_SECONDS = 1 * 60
 
 
 def _init_state():
@@ -224,11 +224,11 @@ usuario_atual = str(user_data["usuario"])
 def aviso_expiracao_sessao():
     restante = segundos_restantes_sessao()
     st.warning(
-        f"Sua sessão expira em **{formatar_tempo_sessao(restante)}**. "
+        f"Sua sessão de teste expira em **{formatar_tempo_sessao(restante)}**. "
         "Deseja continuar conectado?"
     )
     c1, c2 = st.columns(2)
-    if c1.button("🔄 Renovar por mais 1 hora", type="primary", use_container_width=True):
+    if c1.button("🔄 Renovar sessão (teste)", type="primary", use_container_width=True):
         iniciar_sessao()
         st.rerun()
     if c2.button("🚪 Sair agora", use_container_width=True):
@@ -242,7 +242,7 @@ def controle_visual_sessao():
     if restante <= 0:
         sair("Sua sessão expirou. Entre novamente.")
 
-    st.sidebar.caption(f"⏱️ Sessão restante: **{formatar_tempo_sessao(restante)}**")
+    st.caption(f"⏱️ **Sessão restante: {formatar_tempo_sessao(restante)}**")
 
     if restante <= SESSION_WARNING_SECONDS:
         aviso_expiracao_sessao()
@@ -262,12 +262,14 @@ if logo_img:
     st.sidebar.image(logo_img, use_container_width=True)
 st.sidebar.write(f"👤 **{user_data['nome']}**")
 st.sidebar.caption(f"{NIVEIS.get(nivel_user, 'Nível')} · acesso {nivel_user:g}")
-controle_visual_sessao()
 st.sidebar.divider()
 st.sidebar.button("🏠 Menu Principal", use_container_width=True, on_click=navegar, args=("Menu",))
 st.sidebar.button("🚪 Sair", use_container_width=True, on_click=logout_callback)
 
 aba = st.session_state.aba_ativa
+
+# TESTE ACELERADO DA SESSÃO
+controle_visual_sessao()
 
 # ---------- Menu ----------
 if aba == "Menu":
