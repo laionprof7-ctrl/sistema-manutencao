@@ -5,7 +5,7 @@ from datetime import timedelta
 from sqlalchemy import delete, select
 
 from database import registrar_auditoria, transacao, utcnow
-from sst_database import ASSINATURAS_SST, DOCUMENTOS_SST, inicializar_banco_sst
+from sst_database import ASSINATURAS_SST, DOCUMENTOS_SST
 from sst_services import _storage_excluir
 
 PRAZO_ASSINATURA_DIAS = 7
@@ -18,7 +18,6 @@ def limpar_documentos_sem_assinatura_expirados() -> dict:
     eletrônico que ficou sem assinatura é removido da fila, dos indicadores e do
     armazenamento. Documentos com qualquer registro de assinatura são ignorados.
     """
-    inicializar_banco_sst()
     limite = utcnow() - timedelta(days=PRAZO_ASSINATURA_DIAS)
 
     with transacao() as conn:
