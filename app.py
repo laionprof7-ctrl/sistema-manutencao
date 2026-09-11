@@ -34,7 +34,7 @@ if os.path.exists(ARQUIVO_LOGO):
         logo_img = None
 
 st.set_page_config(
-    page_title="Copa Ambiental - Manutenção",
+    page_title="Copa Gestão",
     page_icon=logo_img if logo_img else "🚛",
     layout="wide",
 )
@@ -101,34 +101,52 @@ def limpar_cache_dados():
 preparar_banco()
 
 # ---------- Sessão ----------
+SESSION_DURATION_SECONDS = 60 * 60
+SESSION_WARNING_SECONDS = 5 * 60
+SESSION_POLICY_VERSION = "prod-1h-20260911-v1"
+
+
 def _init_state():
     defaults = {
         "logged_in": False,
         "user_info": None,
-        "aba_ativa": "Menu",
-        "last_activity": time.time(),
+        "aba_ativa": "Portal",
+        "session_expires_at": None,
+        "session_policy_version": None,
         "user_checked_at": 0.0,
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
 
 
+def iniciar_sessao():
+    """Inicia a sessão conforme a política ativa. Navegar não renova o prazo."""
+    st.session_state.session_expires_at = time.time() + SESSION_DURATION_SECONDS
+    st.session_state.session_policy_version = SESSION_POLICY_VERSION
+
+
 def sair(mensagem: str | None = None):
     st.session_state.logged_in = False
     st.session_state.user_info = None
-    st.session_state.aba_ativa = "Menu"
-    st.session_state.last_activity = time.time()
+    st.session_state.aba_ativa = "Portal"
+    st.session_state.session_expires_at = None
     if mensagem:
         st.session_state["logout_message"] = mensagem
     st.rerun()
 
 
-def renovar_atividade():
-    agora = time.time()
-    if st.session_state.logged_in:
-        if agora - float(st.session_state.last_activity) > SESSION_IDLE_MINUTES * 60:
-            sair("Sua sessão expirou por inatividade. Entre novamente.")
-        st.session_state.last_activity = agora
+def segundos_restantes_sessao() -> int:
+    expira_em = st.session_state.get("session_expires_at")
+    if not expira_em:
+        iniciar_sessao()
+        expira_em = st.session_state.session_expires_at
+    return max(0, int(float(expira_em) - time.time()))
+
+
+def formatar_tempo_sessao(segundos: int) -> str:
+    horas, resto = divmod(max(0, segundos), 3600)
+    minutos, segundos = divmod(resto, 60)
+    return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
 
 
 def recarregar_usuario_logado(forcar: bool = False):
@@ -161,7 +179,10 @@ def executar(acao, *args, sucesso: str | None = None, **kwargs):
 
 
 _init_state()
-renovar_atividade()
+
+# Ao mudar a política de sessão, aplica a nova duração uma única vez.
+if st.session_state.logged_in and st.session_state.get("session_policy_version") != SESSION_POLICY_VERSION:
+    iniciar_sessao()
 
 # ---------- Login ----------
 if not st.session_state.logged_in:
@@ -170,7 +191,7 @@ if not st.session_state.logged_in:
         if logo_img:
             st.image(logo_img, width=280)
         st.subheader("Acesso ao Sistema")
-        st.caption("Sistema interno de manutenção e ordens de serviço")
+        st.caption("Sistema interno de gestão operacional")
         mensagem_logout = st.session_state.pop("logout_message", None)
         if mensagem_logout:
             st.info(mensagem_logout)
@@ -192,8 +213,8 @@ if not st.session_state.logged_in:
                         conn.execute(update(USUARIOS).where(USUARIOS.c.usuario == usuario).values(senha=hash_senha(senha), atualizado_em=utcnow()))
                 st.session_state.logged_in = True
                 st.session_state.user_info = obter_usuario(usuario)
-                st.session_state.aba_ativa = "Menu"
-                st.session_state.last_activity = time.time()
+                st.session_state.aba_ativa = "Portal"
+                iniciar_sessao()
                 st.session_state.user_checked_at = time.time()
                 st.rerun()
             st.error("Usuário ou senha incorretos.")
@@ -206,30 +227,91 @@ nivel_user = float(user_data["nivel"])
 usuario_atual = str(user_data["usuario"])
 
 
+@st.dialog("Sua sessão está terminando")
+def aviso_expiracao_sessao():
+    restante = segundos_restantes_sessao()
+    st.warning(
+        f"Sua sessão expira em **{formatar_tempo_sessao(restante)}**. "
+        "Deseja continuar conectado?"
+    )
+    c1, c2 = st.columns(2)
+    if c1.button("🔄 Renovar por mais 1 hora", type="primary", use_container_width=True):
+        iniciar_sessao()
+        st.rerun()
+    if c2.button("🚪 Sair agora", use_container_width=True):
+        sair("Sessão encerrada.")
+
+
+@st.fragment(run_every=1)
+def controle_visual_sessao():
+    restante = segundos_restantes_sessao()
+
+    if restante <= 0:
+        sair("Sua sessão expirou. Entre novamente.")
+
+    st.caption(f"⏱️ **Sessão restante: {formatar_tempo_sessao(restante)}**")
+
+    if restante <= SESSION_WARNING_SECONDS:
+        aviso_expiracao_sessao()
+
+
 def navegar(destino: str):
     st.session_state.aba_ativa = destino
-    st.session_state.last_activity = time.time()
 
 
 def logout_callback():
     st.session_state.logged_in = False
     st.session_state.user_info = None
-    st.session_state.aba_ativa = "Menu"
-    st.session_state.last_activity = time.time()
+    st.session_state.aba_ativa = "Portal"
+    st.session_state.session_expires_at = None
 
 if logo_img:
     st.sidebar.image(logo_img, use_container_width=True)
 st.sidebar.write(f"👤 **{user_data['nome']}**")
 st.sidebar.caption(f"{NIVEIS.get(nivel_user, 'Nível')} · acesso {nivel_user:g}")
 st.sidebar.divider()
-st.sidebar.button("🏠 Menu Principal", use_container_width=True, on_click=navegar, args=("Menu",))
+st.sidebar.button("🏠 Portal", use_container_width=True, on_click=navegar, args=("Portal",))
+st.sidebar.button("🔧 Manutenção", use_container_width=True, on_click=navegar, args=("Manutencao",))
+st.sidebar.button("🦺 Segurança do Trabalho", use_container_width=True, on_click=navegar, args=("SST",))
 st.sidebar.button("🚪 Sair", use_container_width=True, on_click=logout_callback)
 
 aba = st.session_state.aba_ativa
 
-# ---------- Menu ----------
-if aba == "Menu":
-    st.title("Menu Principal")
+# CONTROLE DE SESSÃO
+controle_visual_sessao()
+
+# ---------- Portal de módulos ----------
+if aba == "Portal":
+    st.title("Copa Gestão")
+    st.caption(f"Bem-vindo, {user_data['nome']}. Escolha o módulo que deseja acessar.")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("🔧 Manutenção", type="primary", use_container_width=True):
+            navegar("Manutencao")
+            st.rerun()
+        st.caption("Ordens de Serviço, oficina, triagem, usuários e auditoria.")
+    with c2:
+        if st.button("🦺 Segurança do Trabalho", type="primary", use_container_width=True):
+            navegar("SST")
+            st.rerun()
+        st.caption("GHE, colaboradores, EPIs, entregas, documentos e assinaturas.")
+    st.stop()
+
+# ---------- Segurança do Trabalho ----------
+if aba == "SST":
+    st.caption("Copa Gestão  ›  Segurança do Trabalho")
+    try:
+        from sst_app import renderizar_modulo_sst
+        renderizar_modulo_sst(user_data)
+    except Exception as exc:
+        st.error("Não foi possível carregar o módulo Segurança do Trabalho.")
+        st.exception(exc)
+    st.stop()
+
+# ---------- Manutenção > Ordens de Serviço ----------
+if aba in ("Menu", "Manutencao"):
+    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")
+    st.title("Ordens de Serviço")
     st.caption(f"Bem-vindo, {user_data['nome']}")
 
     # Motoristas (nível 1) não precisam visualizar indicadores operacionais da gestão.
@@ -248,7 +330,7 @@ if aba == "Menu":
 
         painel_resumo()
         st.write("")
-    opcoes = [("📝 Abrir Chamado", "Abrir Chamado"), ("🔍 Consultar Chamados", "Consultar Chamados")]
+    opcoes = [("📝 Abrir Ordem de Serviço", "Abrir Chamado"), ("🔍 Consultar Ordens de Serviço", "Consultar Chamados")]
     if pode_ver_oficina(nivel_user): opcoes.append(("🛠️ Painel da Oficina", "Oficina"))
     if pode_triagem(nivel_user): opcoes.append(("🎯 Triagem e Prioridade", "Triagem"))
     if pode_gerir_usuarios(nivel_user):
@@ -270,7 +352,7 @@ if aba == "Menu":
                 st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))
     st.stop()
 
-st.button("← Voltar ao menu", on_click=navegar, args=("Menu",))
+st.button("← Voltar para Ordens de Serviço", on_click=navegar, args=("Manutencao",))
 
 # ---------- Abrir chamado ----------
 if aba == "Abrir Chamado":
