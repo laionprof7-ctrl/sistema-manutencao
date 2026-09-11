@@ -6,13 +6,13 @@ import sst_app_core as core
 
 
 AREAS = [
-    ("Visão Geral", "Indicadores, pendências e alertas importantes.", core._render_dashboard),
-    ("Colaboradores", "Cadastro, situação, GHE e biometria dos colaboradores.", core._render_colaboradores),
-    ("GHE", "Grupos homogêneos, riscos, medidas, funções e setores.", core._render_ghes),
-    ("EPIs", "Cadastro, CA, validade e situação dos equipamentos.", core._render_epis),
-    ("Entrega de EPI", "Nova entrega e histórico das entregas realizadas.", core._render_entregas),
-    ("Documentos e OS SST", "Ordens de Serviço, documentos gerados e PDFs.", core._render_documentos),
-    ("Assinaturas", "Documentos que aguardam confirmação biométrica.", core._render_assinaturas),
+    ("Visão Geral", core._render_dashboard),
+    ("Colaboradores", core._render_colaboradores),
+    ("Controle de GHE", core._render_ghes),
+    ("Gestão de Registros de EPI", core._render_epis),
+    ("Entrega de EPI", core._render_entregas),
+    ("Documentações SST", core._render_documentos),
+    ("Assinaturas de Documentos", core._render_assinaturas),
 ]
 
 
@@ -30,19 +30,17 @@ def _render_menu() -> None:
     st.caption("Escolha a área que deseja acessar.")
     st.write("")
 
+    # Cada submódulo é o próprio botão: sem repetir título, descrição e "Acessar".
     cols = st.columns(2)
-    for indice, (nome, descricao, _) in enumerate(AREAS):
+    for indice, (nome, _) in enumerate(AREAS):
         with cols[indice % 2]:
-            with st.container(border=True):
-                st.markdown(f"### {nome}")
-                st.caption(descricao)
-                st.button(
-                    f"Acessar {nome}",
-                    key=f"sst_menu_{indice}",
-                    use_container_width=True,
-                    on_click=_abrir_area,
-                    args=(nome,),
-                )
+            st.button(
+                nome,
+                key=f"sst_menu_{indice}",
+                use_container_width=True,
+                on_click=_abrir_area,
+                args=(nome,),
+            )
 
 
 def renderizar_modulo_sst_menu(actor: dict) -> None:
@@ -54,7 +52,7 @@ def renderizar_modulo_sst_menu(actor: dict) -> None:
 
     area_ativa = st.session_state.get("sst_area_ativa")
 
-    topo1, topo2 = st.columns([6.8, 1.35])
+    _, topo2 = st.columns([6.8, 1.35])
     with topo2:
         if st.button("Ajuda / Protocolos", use_container_width=True, key="sst_ajuda_protocolos_menu"):
             core._popup_ajuda_protocolos()
@@ -63,7 +61,7 @@ def renderizar_modulo_sst_menu(actor: dict) -> None:
         _render_menu()
         return
 
-    mapa = {nome: render for nome, _, render in AREAS}
+    mapa = {nome: render for nome, render in AREAS}
     render = mapa.get(area_ativa)
     if render is None:
         _voltar_menu()
