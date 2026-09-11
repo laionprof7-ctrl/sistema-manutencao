@@ -26,11 +26,11 @@ def _voltar_menu() -> None:
 
 
 def _render_menu() -> None:
-    st.markdown("## Segurança do Trabalho")
+    # O cabeçalho do módulo já exibe "Segurança do Trabalho" acima.
+    # Aqui deixamos apenas a orientação e os botões para evitar repetição visual.
     st.caption("Escolha a área que deseja acessar.")
     st.write("")
 
-    # Cada submódulo é o próprio botão: sem repetir título, descrição e "Acessar".
     cols = st.columns(2)
     for indice, (nome, _) in enumerate(AREAS):
         with cols[indice % 2]:
