@@ -300,6 +300,11 @@ if aba == "Portal":
 # ---------- Segurança do Trabalho ----------
 if aba == "SST":
     st.caption("Copa Gestão  ›  Segurança do Trabalho")
+
+    if st.button("← Voltar ao menu principal", use_container_width=False, key="voltar_portal_sst"):
+        navegar("Portal")
+        st.rerun()
+
     try:
         from sst_app import renderizar_modulo_sst
         renderizar_modulo_sst(user_data)
