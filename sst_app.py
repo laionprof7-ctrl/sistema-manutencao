@@ -698,27 +698,18 @@ def _popup_assinatura_biometrica(selecionado: dict) -> None:
 
             st.caption(f"Motivo da entrega: {motivo}")
 
-    hash_doc = selecionado.get("hash_documento") or "—"
-    with st.expander("Dados de segurança do documento"):
-        st.write(f"**Fechado em:** {_data_hora(selecionado['fechado_em'])}")
-        st.write("**Leitor:** Nitgen/FingerTech Hamster DX HFDU06")
-        st.code(f"SHA-256: {hash_doc}", language=None)
-
     biometria_ok, possui_biometria = _executar(
         colaborador_possui_biometria,
         int(selecionado.get("colaborador_id") or 0),
     ) if selecionado.get("colaborador_id") else (True, False)
 
     if biometria_ok and possui_biometria:
-        st.success("Biometria cadastrada. Aguardando o leitor HFDU06.")
+        st.success("Biometria cadastrada. Pronto para confirmar a identidade.")
     else:
-        st.warning("Este colaborador ainda não possui biometria cadastrada no agente biométrico.")
+        st.warning("Biometria ainda não cadastrada para este colaborador. Consulte ❓ Ajuda / Protocolos.")
 
     st.info("🖐️ Coloque o dedo no leitor")
-    st.error(
-        "Leitor biométrico ainda não conectado ao agente local desta estação. "
-        "A confirmação permanece bloqueada até uma leitura real do HFDU06."
-    )
+    st.error("Leitor biométrico indisponível. Verifique a conexão ou consulte ❓ Ajuda / Protocolos.")
 
     c1, c2 = st.columns(2)
     c1.button(
@@ -734,10 +725,6 @@ def _popup_assinatura_biometrica(selecionado: dict) -> None:
 
 def _render_assinaturas(actor: dict) -> None:
     st.subheader("Assinaturas")
-    st.info(
-        "Leitor definido para o projeto: Nitgen/FingerTech Hamster DX HFDU06. "
-        "A identidade só será confirmada após uma leitura biométrica real."
-    )
 
     ok, pendentes = _executar(_pendentes_cache, 100)
     if not ok:
@@ -775,6 +762,103 @@ def _render_assinaturas(actor: dict) -> None:
         else:
             st.session_state.pop("sst_assinatura_documento", None)
 
+@st.dialog("❓ Ajuda / Protocolos SST", width="large")
+def _popup_ajuda_protocolos() -> None:
+    st.caption("Orientações operacionais e informações técnicas do módulo SST/EPI.")
+
+    with st.expander("📦 Protocolo de entrega de EPI", expanded=True):
+        st.markdown(
+            """
+1. Selecione o colaborador correto.
+2. Confira os EPIs, CAs, quantidades e o motivo da entrega.
+3. Registre a entrega no sistema.
+4. O documento é gerado e preservado para assinatura.
+5. Na tela **Assinaturas**, abra a confirmação biométrica pelo botão 🖐️.
+6. O colaborador confere os itens e coloca o dedo no leitor.
+7. Somente após a identidade ser confirmada a assinatura poderá ser concluída.
+
+**Nunca entregue o material usando a biometria de outra pessoa.**
+            """
+        )
+
+    with st.expander("👷 Cadastro de colaborador"):
+        st.markdown(
+            """
+- Cadastre nome, matrícula, CPF, admissão, função e setor conforme os dados oficiais da empresa.
+- Vincule o colaborador ao GHE correspondente.
+- Mantenha colaboradores desligados/inativos sem apagar o histórico anterior.
+- Antes da primeira assinatura biométrica, o colaborador precisa possuir biometria cadastrada.
+            """
+        )
+
+    with st.expander("🖐️ Cadastro e uso da biometria"):
+        st.markdown(
+            """
+- O cadastro biométrico será realizado na estação autorizada.
+- A digital serve para confirmar a identidade do colaborador no momento da entrega.
+- O sistema não deve permitir aprovação manual fingindo uma leitura biométrica.
+- A imagem bruta da impressão digital não deve ser armazenada no módulo SST.
+- Em caso de falha de leitura, limpe o sensor, reposicione o dedo e tente novamente.
+            """
+        )
+
+    with st.expander("🔌 Leitor biométrico e estação"):
+        st.markdown(
+            """
+**Leitor definido para o projeto:** Nitgen/FingerTech Hamster DX HFDU06, conectado por USB a um computador Windows autorizado.
+
+A comunicação com o leitor será realizada por um agente local instalado nessa estação. O navegador/Streamlit não acessa diretamente o USB.
+
+Se aparecer **“Leitor biométrico indisponível”**, verifique:
+- cabo USB e alimentação do leitor;
+- driver do equipamento;
+- agente local em execução;
+- conexão da estação com a internet.
+            """
+        )
+
+    with st.expander("🔐 Segurança e integridade dos documentos"):
+        st.markdown(
+            """
+- Cada documento fechado possui um **SHA-256**, usado para identificar exatamente o PDF que será assinado.
+- A assinatura deve ficar vinculada ao colaborador, documento, data/hora, estação e evidência da verificação biométrica.
+- PDFs fechados não devem ser alterados depois da geração da evidência de assinatura.
+- Os PDFs novos são preservados em armazenamento privado; documentos antigos permanecem compatíveis com o histórico existente.
+- Informações técnicas e evidências ficam no backend/auditoria e não precisam poluir a operação diária.
+            """
+        )
+
+    with st.expander("⏱️ Sessão e logout"):
+        st.markdown(
+            """
+A política definida para o sistema é:
+- sessão de **01:00:00**;
+- contador regressivo visível;
+- aviso ao chegar em **00:05:00**;
+- opção para renovar por mais 1 hora;
+- logout automático ao chegar em **00:00:00** se a sessão não for renovada.
+            """
+        )
+
+    with st.expander("🛠️ Problemas comuns"):
+        st.markdown(
+            """
+**Biometria não cadastrada:** faça o cadastro biométrico do colaborador antes da assinatura.
+
+**Leitor indisponível:** confira USB, driver e agente local.
+
+**EPI não aparece para entrega:** confirme se o EPI está ativo e se o CA está válido.
+
+**Documento não aparece em Assinaturas:** confirme se ele está com status **Aguardando Assinatura**.
+
+**Dúvida sobre um registro:** não apague o histórico; consulte o documento e a auditoria antes de corrigir qualquer dado.
+            """
+        )
+
+    if st.button("Fechar ajuda", use_container_width=True):
+        st.rerun()
+
+
 def _render_dashboard(actor: dict) -> None:
     st.markdown("### Visão geral")
     ok, resumo = _executar(_resumo_dashboard_cache)
@@ -796,6 +880,12 @@ def renderizar_modulo_sst(actor: dict) -> None:
     if mensagem := st.session_state.pop("sst_mensagem", None):
         mostrar_notificacao(mensagem)
     renderizar_cabecalho_modulo()
+
+    _, col_ajuda = st.columns([7.2, 1.15])
+    with col_ajuda:
+        if st.button("❓ Ajuda / Protocolos", use_container_width=True, key="sst_ajuda_protocolos"):
+            _popup_ajuda_protocolos()
+
     opcoes = {
         "📊 Visão geral": _render_dashboard,
         "🧩 GHE / Funções e Setores": _render_ghes,
