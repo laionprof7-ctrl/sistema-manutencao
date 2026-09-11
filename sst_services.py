@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -17,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from database import ENGINE, registrar_auditoria, transacao, utcnow
 from sst_database import (
     ASSINATURAS_SST,
+    BIOMETRIAS_COLABORADORES,
     COLABORADORES,
     CONTADORES_SST,
     DOCUMENTOS_SST,
@@ -834,18 +836,258 @@ def listar_entregas(limite: int = 100) -> list[dict]:
 
 # ---------------------- BIOMETRIA -----------------------
 
-def registrar_assinatura_biometrica(actor: dict, documento_id: int, colaborador_id: int, referencia_biometrica: str,
-                                     estacao: str | None = None, detalhes: str | None = None) -> int:
-    """Registra somente o resultado de uma validação real feita pelo SDK biométrico."""
-    _exigir_operacao(actor)
-    referencia_biometrica = _texto(referencia_biometrica, 255, True); estacao = _texto(estacao, 160); detalhes = _texto(detalhes, 2000)
+BIOMETRIA_MODELO_OFICIAL = "Nitgen Hamster DX HFDU06"
+BIOMETRIA_JANELA_EVENTO_SEGUNDOS = 180
+
+
+def _segredo_agente_biometrico() -> str:
+    """Segredo compartilhado apenas entre o backend e o agente Windows local."""
+    valor = os.getenv("SST_BIOMETRIC_AGENT_SECRET")
+    if valor:
+        return valor.strip()
+    try:
+        import streamlit as st
+        valor = st.secrets.get("SST_BIOMETRIC_AGENT_SECRET")
+        if valor:
+            return str(valor).strip()
+    except Exception:
+        pass
+    raise RegraSSTError(
+        "O agente biométrico ainda não foi configurado. "
+        "A assinatura permanece bloqueada até a instalação do leitor e do agente local."
+    )
+
+
+def _texto_evidencia(valor, limite: int, obrigatorio: bool = True) -> str | None:
+    if valor is None:
+        if obrigatorio:
+            raise RegraSSTError("Evidência biométrica incompleta.")
+        return None
+    texto = str(valor).strip()
+    if not texto:
+        if obrigatorio:
+            raise RegraSSTError("Evidência biométrica incompleta.")
+        return None
+    if len(texto) > limite:
+        raise RegraSSTError("Evidência biométrica inválida.")
+    return texto
+
+
+def _timestamp_evidencia(valor: str) -> datetime:
+    try:
+        texto = str(valor).strip().replace("Z", "+00:00")
+        momento = datetime.fromisoformat(texto)
+        if momento.tzinfo is None:
+            raise ValueError
+        return momento.astimezone(timezone.utc)
+    except Exception as exc:
+        raise RegraSSTError("Data/hora da evidência biométrica é inválida.") from exc
+
+
+def _payload_assinado(evidencia: dict) -> bytes:
+    """Serialização que o agente Windows deverá usar antes de gerar o HMAC-SHA256."""
+    payload = {k: v for k, v in evidencia.items() if k != "assinatura_hmac"}
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _validar_evidencia_agente(evidencia: dict, tipo_evento: str) -> dict:
+    """
+    Valida a prova enviada pelo agente local.
+
+    O Streamlit NÃO cria esta assinatura HMAC. Ela deverá ser produzida pelo agente
+    Windows depois que o SDK Nitgen confirmar uma captura/correspondência real.
+    """
+    if not isinstance(evidencia, dict):
+        raise RegraSSTError("Evidência biométrica inválida.")
+
+    assinatura = _texto_evidencia(evidencia.get("assinatura_hmac"), 128)
+    evento_id = _texto_evidencia(evidencia.get("evento_id"), 120)
+    tipo = _texto_evidencia(evidencia.get("tipo_evento"), 40)
+    if tipo != tipo_evento:
+        raise RegraSSTError("Tipo de evento biométrico inválido.")
+
+    momento = _timestamp_evidencia(_texto_evidencia(evidencia.get("timestamp"), 80))
+    diferenca = abs((datetime.now(timezone.utc) - momento).total_seconds())
+    if diferenca > BIOMETRIA_JANELA_EVENTO_SEGUNDOS:
+        raise RegraSSTError("A evidência biométrica expirou. Faça uma nova leitura.")
+
+    segredo = _segredo_agente_biometrico().encode("utf-8")
+    esperado = hmac.new(segredo, _payload_assinado(evidencia), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(assinatura.lower(), esperado.lower()):
+        raise RegraSSTError("A evidência não foi autenticada pelo agente biométrico autorizado.")
+
+    return {
+        "evento_id": evento_id,
+        "timestamp": momento,
+        "agente_id": _texto_evidencia(evidencia.get("agente_id"), 120),
+        "estacao": _texto_evidencia(evidencia.get("estacao"), 160),
+        "dispositivo_modelo": _texto_evidencia(evidencia.get("dispositivo_modelo"), 120),
+        "dispositivo_serial": _texto_evidencia(evidencia.get("dispositivo_serial"), 120, False),
+        "sdk_versao": _texto_evidencia(evidencia.get("sdk_versao"), 80, False),
+        "referencia_biometrica": _texto_evidencia(evidencia.get("referencia_biometrica"), 255),
+        "template_hash": _texto_evidencia(evidencia.get("template_hash"), 64, False),
+        "resultado": _texto_evidencia(evidencia.get("resultado"), 40),
+        "score_verificacao": int(evidencia.get("score_verificacao")) if evidencia.get("score_verificacao") is not None else None,
+    }
+
+
+def obter_biometria_colaborador(colaborador_id: int) -> dict | None:
+    stmt = select(BIOMETRIAS_COLABORADORES).where(
+        BIOMETRIAS_COLABORADORES.c.colaborador_id == int(colaborador_id)
+    )
     with transacao() as conn:
-        doc = conn.execute(select(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id))).mappings().first()
-        if not doc: raise RegraSSTError("Documento não encontrado.")
-        if doc["status"] != "Aguardando Assinatura" or not doc["hash_documento"]: raise RegraSSTError("Documento não está disponível para assinatura.")
-        if int(doc["colaborador_id"]) != int(colaborador_id): raise RegraSSTError("O colaborador informado não corresponde ao documento.")
-        result = conn.execute(insert(ASSINATURAS_SST).values(documento_id=int(documento_id), colaborador_id=int(colaborador_id), metodo="Biometria", status="Validada", hash_documento=doc["hash_documento"], assinado_em=utcnow(), estacao=estacao, referencia_biometrica=referencia_biometrica, detalhes=detalhes))
+        row = conn.execute(stmt).mappings().first()
+        return dict(row) if row else None
+
+
+def colaborador_possui_biometria(colaborador_id: int) -> bool:
+    registro = obter_biometria_colaborador(colaborador_id)
+    return bool(registro and registro.get("ativo"))
+
+
+def registrar_cadastro_biometrico(actor: dict, colaborador_id: int, evidencia: dict) -> int:
+    """
+    Grava somente a REFERÊNCIA do template criado pelo agente Nitgen.
+    A imagem da digital e o template biométrico bruto não são armazenados aqui.
+    """
+    _exigir_operacao(actor)
+    ev = _validar_evidencia_agente(evidencia, "cadastro")
+    if ev["resultado"] != "CADASTRADO":
+        raise RegraSSTError("O agente não confirmou o cadastro biométrico.")
+    if ev["dispositivo_modelo"] != BIOMETRIA_MODELO_OFICIAL:
+        raise RegraSSTError("O evento foi produzido por um modelo de leitor não autorizado para esta estação.")
+    if ev["template_hash"] and not re.fullmatch(r"[0-9a-fA-F]{64}", ev["template_hash"]):
+        raise RegraSSTError("Hash do template biométrico inválido.")
+
+    now = utcnow()
+    with transacao() as conn:
+        colab = _colaborador(conn, int(colaborador_id))
+        if not colab or not colab.get("ativo"):
+            raise RegraSSTError("Colaborador não encontrado ou inativo.")
+
+        atual = conn.execute(
+            select(BIOMETRIAS_COLABORADORES).where(
+                BIOMETRIAS_COLABORADORES.c.colaborador_id == int(colaborador_id)
+            )
+        ).mappings().first()
+
+        valores = dict(
+            provedor="Nitgen eNBioBSP",
+            referencia_biometrica=ev["referencia_biometrica"],
+            template_hash=ev["template_hash"],
+            agente_id=ev["agente_id"],
+            dispositivo_modelo=ev["dispositivo_modelo"],
+            dispositivo_serial=ev["dispositivo_serial"],
+            sdk_versao=ev["sdk_versao"],
+            ativo=True,
+            atualizado_em=now,
+        )
+        if atual:
+            conn.execute(
+                update(BIOMETRIAS_COLABORADORES)
+                .where(BIOMETRIAS_COLABORADORES.c.id == int(atual["id"]))
+                .values(**valores)
+            )
+            biometria_id = int(atual["id"])
+        else:
+            valores["colaborador_id"] = int(colaborador_id)
+            valores["cadastrado_em"] = now
+            result = conn.execute(insert(BIOMETRIAS_COLABORADORES).values(**valores))
+            biometria_id = int(result.inserted_primary_key[0])
+
+        registrar_auditoria(
+            conn, actor["usuario"], "SST_BIOMETRIA_CADASTRADA", "sst_colaborador", str(colaborador_id),
+            f"biometria_id={biometria_id};agente={ev['agente_id']};dispositivo={ev['dispositivo_modelo']};evento={ev['evento_id']}"
+        )
+        return biometria_id
+
+
+def registrar_assinatura_biometrica(actor: dict, documento_id: int, colaborador_id: int, evidencia: dict) -> int:
+    """
+    Marca um documento como Assinado SOMENTE após validar uma evidência HMAC
+    produzida pelo agente local depois de uma correspondência biométrica real.
+    """
+    _exigir_operacao(actor)
+    ev = _validar_evidencia_agente(evidencia, "verificacao")
+    if ev["resultado"] != "VALIDADO":
+        raise RegraSSTError("A impressão digital não foi validada pelo agente biométrico.")
+    if ev["dispositivo_modelo"] != BIOMETRIA_MODELO_OFICIAL:
+        raise RegraSSTError("O evento foi produzido por um modelo de leitor não autorizado para esta estação.")
+
+    try:
+        documento_evento = int(evidencia.get("documento_id"))
+        colaborador_evento = int(evidencia.get("colaborador_id"))
+    except Exception as exc:
+        raise RegraSSTError("Documento ou colaborador ausente na evidência biométrica.") from exc
+    hash_evento = _texto_evidencia(evidencia.get("hash_documento"), 64)
+
+    if documento_evento != int(documento_id) or colaborador_evento != int(colaborador_id):
+        raise RegraSSTError("A evidência biométrica não corresponde a esta solicitação de assinatura.")
+
+    with transacao() as conn:
+        doc = conn.execute(
+            select(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id))
+        ).mappings().first()
+        if not doc:
+            raise RegraSSTError("Documento não encontrado.")
+        if doc["status"] != "Aguardando Assinatura" or not doc["hash_documento"]:
+            raise RegraSSTError("Documento não está disponível para assinatura.")
+        if int(doc["colaborador_id"]) != int(colaborador_id):
+            raise RegraSSTError("O colaborador informado não corresponde ao documento.")
+        if not hmac.compare_digest(str(doc["hash_documento"]).lower(), hash_evento.lower()):
+            raise RegraSSTError("O hash do documento não corresponde à evidência biométrica.")
+
+        cadastro = conn.execute(
+            select(BIOMETRIAS_COLABORADORES).where(
+                and_(
+                    BIOMETRIAS_COLABORADORES.c.colaborador_id == int(colaborador_id),
+                    BIOMETRIAS_COLABORADORES.c.ativo.is_(True),
+                )
+            )
+        ).mappings().first()
+        if not cadastro:
+            raise RegraSSTError("Este colaborador ainda não possui biometria cadastrada.")
+        if not hmac.compare_digest(
+            str(cadastro["referencia_biometrica"]), str(ev["referencia_biometrica"])
+        ):
+            raise RegraSSTError("A biometria validada não corresponde ao cadastro do colaborador.")
+
+        evento_existente = conn.execute(
+            select(ASSINATURAS_SST.c.id).where(ASSINATURAS_SST.c.evento_id == ev["evento_id"])
+        ).first()
+        if evento_existente:
+            raise RegraSSTError("Este evento biométrico já foi utilizado.")
+
+        result = conn.execute(insert(ASSINATURAS_SST).values(
+            documento_id=int(documento_id),
+            colaborador_id=int(colaborador_id),
+            metodo="Biometria",
+            status="Validada",
+            hash_documento=doc["hash_documento"],
+            assinado_em=utcnow(),
+            estacao=ev["estacao"],
+            referencia_biometrica=ev["referencia_biometrica"],
+            agente_id=ev["agente_id"],
+            dispositivo_modelo=ev["dispositivo_modelo"],
+            dispositivo_serial=ev["dispositivo_serial"],
+            sdk_versao=ev["sdk_versao"],
+            evento_id=ev["evento_id"],
+            score_verificacao=ev["score_verificacao"],
+            detalhes=json.dumps({
+                "resultado": ev["resultado"],
+                "timestamp_agente": ev["timestamp"].isoformat(),
+                "modelo_oficial": BIOMETRIA_MODELO_OFICIAL,
+            }, ensure_ascii=False, sort_keys=True),
+        ))
         assinatura_id = int(result.inserted_primary_key[0])
-        conn.execute(update(DOCUMENTOS_SST).where(DOCUMENTOS_SST.c.id == int(documento_id)).values(status="Assinado"))
-        registrar_auditoria(conn, actor["usuario"], "SST_DOCUMENTO_ASSINADO_BIOMETRIA", "sst_documento", doc["numero"], f"assinatura_id={assinatura_id};sha256={doc['hash_documento']}")
+
+        conn.execute(
+            update(DOCUMENTOS_SST)
+            .where(DOCUMENTOS_SST.c.id == int(documento_id))
+            .values(status="Assinado")
+        )
+        registrar_auditoria(
+            conn, actor["usuario"], "SST_DOCUMENTO_ASSINADO_BIOMETRIA", "sst_documento", doc["numero"],
+            f"assinatura_id={assinatura_id};sha256={doc['hash_documento']};evento={ev['evento_id']};agente={ev['agente_id']};score={ev['score_verificacao']}"
+        )
         return assinatura_id
