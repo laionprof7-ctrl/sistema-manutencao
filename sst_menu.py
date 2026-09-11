@@ -68,6 +68,19 @@ def renderizar_modulo_sst_menu(actor: dict) -> None:
 
     area_ativa = st.session_state.get("sst_area_ativa")
 
+    # Dentro de um submódulo, a navegação é hierárquica:
+    # Submódulo -> menu Segurança do Trabalho -> menu principal Copa Gestão.
+    # O botão externo de retorno ao Portal só aparece no menu raiz do SST.
+    if area_ativa:
+        st.markdown(
+            """
+            <style>
+            .st-key-voltar_portal_sst { display: none !important; }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
     _, topo2 = st.columns([6.8, 1.35])
     with topo2:
         if st.button("Ajuda / Protocolos", use_container_width=True, key="sst_ajuda_protocolos_menu"):
