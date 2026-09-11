@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 import html
 
@@ -8,6 +9,14 @@ import streamlit as st
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_PATH = BASE_DIR / "logo.png"
+
+
+@lru_cache(maxsize=1)
+def _logo_bytes() -> bytes | None:
+    try:
+        return LOGO_PATH.read_bytes() if LOGO_PATH.exists() else None
+    except Exception:
+        return None
 
 
 def aplicar_estilo_sst() -> None:
@@ -36,18 +45,18 @@ def aplicar_estilo_sst() -> None:
         .block-container label,
         .block-container [data-testid="stCaptionContainer"],
         .block-container [data-testid="stMarkdownContainer"] p {
-            font-size: 1.075rem !important;
-            line-height: 1.55 !important;
+            font-size: 1.11rem !important;
+            line-height: 1.56 !important;
         }
-        .block-container h2 { font-size: 1.82rem !important; }
-        .block-container h3 { font-size: 1.54rem !important; }
-        .block-container h4 { font-size: 1.24rem !important; }
+        .block-container h2 { font-size: 1.88rem !important; }
+        .block-container h3 { font-size: 1.6rem !important; }
+        .block-container h4 { font-size: 1.28rem !important; }
 
         [data-testid="stRadio"] label p {
-            font-size: 1.065rem !important;
+            font-size: 1.1rem !important;
             font-weight: 675 !important;
         }
-        [data-testid="stRadio"] > div { gap: .5rem .9rem !important; }
+        [data-testid="stRadio"] > div { gap: .55rem .95rem !important; }
 
         .stSelectbox label,
         .stTextInput label,
@@ -55,7 +64,7 @@ def aplicar_estilo_sst() -> None:
         .stDateInput label,
         .stTextArea label,
         .stCheckbox label {
-            font-size: 1.04rem !important;
+            font-size: 1.07rem !important;
             font-weight: 650 !important;
         }
         .stSelectbox [data-baseweb="select"] > div,
@@ -63,7 +72,7 @@ def aplicar_estilo_sst() -> None:
         .stNumberInput input,
         .stDateInput input,
         .stTextArea textarea {
-            font-size: 1.065rem !important;
+            font-size: 1.1rem !important;
         }
 
         [data-testid="stMetric"] {
@@ -74,8 +83,8 @@ def aplicar_estilo_sst() -> None:
             box-shadow: 0 8px 24px rgba(15,23,42,.04);
             min-height: 120px;
         }
-        [data-testid="stMetricLabel"] { font-weight: 700; color: var(--copa-muted); font-size: 1.06rem !important; }
-        [data-testid="stMetricValue"] { font-weight: 800; color: var(--copa-ink); font-size: 2.1rem !important; }
+        [data-testid="stMetricLabel"] { font-weight: 700; color: var(--copa-muted); font-size: 1.08rem !important; }
+        [data-testid="stMetricValue"] { font-weight: 800; color: var(--copa-ink); font-size: 2.12rem !important; }
 
         div.stButton > button,
         div.stDownloadButton > button,
@@ -83,7 +92,7 @@ def aplicar_estilo_sst() -> None:
         button[data-testid="stBaseButton-secondary"] {
             border-radius: 11px !important;
             min-height: 3rem;
-            font-size: 1.04rem !important;
+            font-size: 1.06rem !important;
             font-weight: 700 !important;
         }
         div.stButton > button[kind="primary"],
@@ -99,20 +108,20 @@ def aplicar_estilo_sst() -> None:
         }
 
         [data-testid="stExpander"] { border-radius: 12px; overflow: hidden; }
-        [data-testid="stExpander"] summary p { font-size: 1.065rem !important; font-weight: 650 !important; }
+        [data-testid="stExpander"] summary p { font-size: 1.1rem !important; font-weight: 650 !important; }
 
-        table.sst-table { font-size: 1.06rem !important; }
+        table.sst-table { font-size: 1.09rem !important; }
         table.sst-table th, table.sst-table td { padding: 13px 15px !important; }
 
         .sst-brand-tag {
-            font-size: .86rem;
+            font-size: .88rem;
             letter-spacing: .08em;
             text-transform: uppercase;
             color: var(--copa-muted);
             font-weight: 800;
             margin-bottom: 4px;
         }
-        .sst-brand-title { color: var(--copa-ink); font-size: 1.12rem; font-weight: 800; }
+        .sst-brand-title { color: var(--copa-ink); font-size: 1.16rem; font-weight: 800; }
         .sst-section-note { border-left: 4px solid var(--copa-green); padding: .85rem 1.05rem; background: rgba(8,123,79,.045); border-radius: 0 10px 10px 0; margin: .5rem 0 1rem; }
         .sst-dev-note { border: 1px solid #f2df8c; background: #fffbea; color: #846300; padding: 12px 16px; border-radius: 12px; margin-bottom: 10px; font-size: 1rem; }
 
@@ -120,7 +129,7 @@ def aplicar_estilo_sst() -> None:
             .block-container p,
             .block-container label,
             .block-container [data-testid="stMarkdownContainer"] p { font-size: 1rem !important; }
-            [data-testid="stRadio"] label p { font-size: .98rem !important; }
+            [data-testid="stRadio"] label p { font-size: 1rem !important; }
         }
         </style>
         """,
@@ -129,8 +138,9 @@ def aplicar_estilo_sst() -> None:
 
 
 def renderizar_logo(width: int = 180) -> None:
-    if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), width=width)
+    logo = _logo_bytes()
+    if logo:
+        st.image(logo, width=width)
     else:
         st.markdown("### COPA")
         st.caption("Soluções Sustentáveis")
@@ -139,7 +149,7 @@ def renderizar_logo(width: int = 180) -> None:
 def renderizar_topo_portal() -> None:
     esquerda, direita = st.columns([4.5, 1.5], vertical_alignment="center")
     with esquerda:
-        renderizar_logo(225)
+        renderizar_logo(235)
     with direita:
         st.markdown('<div style="text-align:right"><div class="sst-brand-tag">Copa Gestão</div><div class="sst-brand-title">Segurança do Trabalho</div></div>', unsafe_allow_html=True)
 
@@ -152,7 +162,7 @@ def renderizar_cabecalho_modulo() -> None:
     """Cabeçalho interno enxuto do módulo."""
     esquerda, direita = st.columns([5, 1.35], vertical_alignment="center")
     with esquerda:
-        renderizar_logo(210)
+        renderizar_logo(220)
     with direita:
         st.caption("COPA GESTÃO")
         st.markdown("**Segurança do Trabalho**")
