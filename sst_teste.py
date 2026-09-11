@@ -16,6 +16,19 @@ from copa_brand import instalar_tema_apos_page_config
 
 instalar_tema_apos_page_config()
 
+# Usa a inicialização otimizada antes de qualquer import do módulo SST.
+# Assim, quando sst_app_core importar inicializar_banco_sst, já receberá
+# a versão que reduz leituras repetidas de metadados no PostgreSQL.
+try:
+    import sst_database
+    from sst_fast_init import inicializar_banco_sst_rapido
+
+    sst_database.inicializar_banco_sst = inicializar_banco_sst_rapido
+except Exception:
+    # Em caso de incompatibilidade inesperada, o módulo SST ainda poderá
+    # usar a inicialização original em vez de impedir o acesso ao sistema.
+    pass
+
 # Limpeza de retenção somente quando o usuário entra no SST e, no máximo,
 # uma vez por hora por sessão. Isso evita trabalho de banco no login/Manutenção.
 if st.session_state.get("aba_ativa") == "SST":
@@ -42,4 +55,10 @@ if not APP.exists():
     raise FileNotFoundError("app.py não encontrado ao lado de sst_teste.py")
 
 codigo = APP.read_text(encoding="utf-8")
+
+# Os nomes dos módulos ficam limpos, sem símbolos, tanto no portal quanto
+# na barra lateral. Mantemos os demais ícones apenas onde ajudam a operação.
+codigo = codigo.replace('"🔧 Manutenção"', '"Manutenção"')
+codigo = codigo.replace('"🦺 Segurança do Trabalho"', '"Segurança do Trabalho"')
+
 exec(compile(codigo, str(APP), "exec"), {"__name__": "__main__", "__file__": str(APP)})
