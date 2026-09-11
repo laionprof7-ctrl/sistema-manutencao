@@ -61,4 +61,22 @@ codigo = APP.read_text(encoding="utf-8")
 codigo = codigo.replace('"🔧 Manutenção"', '"Manutenção"')
 codigo = codigo.replace('"🦺 Segurança do Trabalho"', '"Segurança do Trabalho"')
 
+# A Manutenção agora é um módulo do Copa Gestão, portanto segue a mesma
+# navegação do SST: volta ao portal e não oferece logout dentro do módulo.
+codigo = codigo.replace(
+    '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n'
+    '    st.title("Ordens de Serviço")',
+    '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n\n'
+    '    if st.button("← Voltar ao menu principal", use_container_width=False, key="voltar_portal_manutencao"):\n'
+    '        navegar("Portal")\n'
+    '        st.rerun()\n\n'
+    '    st.title("Ordens de Serviço")',
+)
+codigo = codigo.replace(
+    '    # Navegação principal também fica no corpo da página para funcionar bem no celular,\n'
+    '    # onde a barra lateral do Streamlit pode ficar recolhida/oculta.\n'
+    '    opcoes.append(("🚪 Sair / Logout", "Logout"))\n\n',
+    '',
+)
+
 exec(compile(codigo, str(APP), "exec"), {"__name__": "__main__", "__file__": str(APP)})
