@@ -18,6 +18,7 @@ from sst_services import (
     cadastrar_colaborador,
     cadastrar_epi,
     cadastrar_ghe,
+    colaborador_possui_biometria,
     criar_ordem_servico_sst,
     definir_status_colaborador,
     definir_status_epi,
@@ -656,19 +657,87 @@ def _render_documentos(actor: dict) -> None:
         "⬇️ prepara/baixa o PDF fechado; 📄 gera o PDF de um rascunho e o fecha para assinatura."
     )
 
-def _render_assinaturas() -> None:
+def _render_assinaturas(actor: dict) -> None:
     st.subheader("Assinaturas")
-    st.warning("A integração com o leitor biométrico ainda não está habilitada. O sistema preserva o PDF exato e seu hash, mas não simula uma biometria.")
+    st.info(
+        "Leitor definido para o projeto: Nitgen/FingerTech Hamster DX HFDU06. "
+        "A assinatura só será concluída após uma verificação biométrica real do agente local; "
+        "o sistema não simula aprovação de digital."
+    )
+
     ok, pendentes = _executar(_pendentes_cache, 100)
-    if ok and pendentes:
-        st.markdown("#### Aguardando assinatura biométrica")
-        st.dataframe([
-            {"Número": r["numero"], "Colaborador": r["colaborador"], "Matrícula": r.get("matricula") or "—", "Tipo": r["tipo"], "Título": r["titulo"], "Fechado em": _data_hora(r["fechado_em"])}
-            for r in pendentes
-        ], use_container_width=True, hide_index=True)
-        st.caption("Exibindo até 100 documentos pendentes mais recentes.")
-    elif ok:
+    if not ok:
+        return
+    if not pendentes:
         st.info("Nenhum documento aguardando assinatura.")
+        st.session_state.pop("sst_assinatura_documento", None)
+        return
+
+    st.markdown("#### Aguardando assinatura biométrica")
+
+    cab = st.columns([1.35, 2.35, 1.0, 1.55, 2.5, 1.45, 0.8])
+    for col, titulo in zip(cab, ["Número", "Colaborador", "Matrícula", "Tipo", "Título", "Fechado em", "Ação"]):
+        col.markdown(f"**{titulo}**")
+
+    for r in pendentes:
+        cols = st.columns([1.35, 2.35, 1.0, 1.55, 2.5, 1.45, 0.8])
+        cols[0].write(r["numero"])
+        cols[1].write(r["colaborador"])
+        cols[2].write(r.get("matricula") or "—")
+        cols[3].write(r["tipo"])
+        cols[4].write(r["titulo"])
+        cols[5].write(_data_hora(r["fechado_em"]))
+        if cols[6].button("🖐️", key=f"sst_assinar_{r['id']}", help="Preparar assinatura biométrica"):
+            st.session_state["sst_assinatura_documento"] = int(r["id"])
+            st.rerun()
+        st.divider()
+
+    st.caption("Exibindo até 100 documentos pendentes mais recentes. 🖐️ abre a preparação da assinatura biométrica.")
+
+    selecionado_id = st.session_state.get("sst_assinatura_documento")
+    if not selecionado_id:
+        return
+
+    selecionado = next((r for r in pendentes if int(r["id"]) == int(selecionado_id)), None)
+    if not selecionado:
+        st.session_state.pop("sst_assinatura_documento", None)
+        return
+
+    st.markdown("---")
+    st.markdown("#### Preparar assinatura")
+    c1, c2 = st.columns(2)
+    c1.write(f"**Documento:** {selecionado['numero']}")
+    c1.write(f"**Colaborador:** {selecionado['colaborador']}")
+    c1.write(f"**Matrícula:** {selecionado.get('matricula') or '—'}")
+    c2.write(f"**Tipo:** {selecionado['tipo']}")
+    c2.write(f"**Fechado em:** {_data_hora(selecionado['fechado_em'])}")
+    c2.write(f"**Leitor previsto:** Nitgen Hamster DX HFDU06")
+
+    hash_doc = selecionado.get("hash_documento") or "—"
+    st.code(f"SHA-256: {hash_doc}", language=None)
+
+    # O cadastro pode existir antes do agente físico estar disponível. A consulta é apenas
+    # informativa; nenhuma assinatura é validada pela interface.
+    biometria_ok, possui_biometria = _executar(
+        colaborador_possui_biometria,
+        int(selecionado.get("colaborador_id") or 0),
+    ) if selecionado.get("colaborador_id") else (True, False)
+
+    if biometria_ok and possui_biometria:
+        st.success("Biometria do colaborador: cadastrada.")
+    else:
+        st.warning("Biometria do colaborador: ainda não cadastrada no agente biométrico.")
+
+    st.error(
+        "Leitor biométrico ainda não conectado ao agente local desta estação. "
+        "A assinatura permanece bloqueada até o HFDU06 realizar uma verificação real."
+    )
+
+    b1, b2 = st.columns([1, 1])
+    b1.button("🖐️ Ler digital e assinar", disabled=True, use_container_width=True, key=f"sst_bio_bloq_{selecionado_id}")
+    if b2.button("Fechar preparação", use_container_width=True, key=f"sst_fechar_preparo_{selecionado_id}"):
+        st.session_state.pop("sst_assinatura_documento", None)
+        st.rerun()
 
 
 def _render_dashboard(actor: dict) -> None:
@@ -699,7 +768,7 @@ def renderizar_modulo_sst(actor: dict) -> None:
         "⛑️ EPIs": _render_epis,
         "📦 Entrega de EPI": _render_entregas,
         "📄 Documentos / OS de SST": _render_documentos,
-        "✍️ Assinaturas": lambda _actor: _render_assinaturas(),
+        "✍️ Assinaturas": _render_assinaturas,
     }
     escolha = st.radio("Módulo", list(opcoes), horizontal=True, label_visibility="collapsed", key="sst_aba_ativa")
     opcoes[escolha](actor)
