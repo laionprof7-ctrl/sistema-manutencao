@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import streamlit as st
 
-import sst_app_core as core
+from sst_ui import aplicar_estilo_sst, mostrar_notificacao, renderizar_cabecalho_modulo
 
 
 AREAS = [
-    ("Visão Geral", "Visão Geral", core._render_dashboard),
-    ("Colaboradores", "Colaboradores", core._render_colaboradores),
-    ("Controle de GHE", "Controle de GHE", core._render_ghes),
-    ("Gestão de Registros de EPI", "Gestão de Registros de EPI", core._render_epis),
-    ("Entrega de EPI", "Entrega de EPI", core._render_entregas),
-    ("Documentações SST", "Documentações SST", core._render_documentos),
-    ("Assinaturas de Documentos", "Assinaturas de Documentos", core._render_assinaturas),
+    ("Visão Geral", "Visão Geral", "_render_dashboard"),
+    ("Colaboradores", "Colaboradores", "_render_colaboradores"),
+    ("Controle de GHE", "Controle de GHE", "_render_ghes"),
+    ("Gestão de Registros de EPI", "Gestão de Registros de EPI", "_render_epis"),
+    ("Entrega de EPI", "Entrega de EPI", "_render_entregas"),
+    ("Documentações SST", "Documentações SST", "_render_documentos"),
+    ("Assinaturas de Documentos", "Assinaturas de Documentos", "_render_assinaturas"),
 ]
 
 
@@ -29,8 +29,8 @@ def _render_menu() -> None:
     st.caption("Escolha a área que deseja acessar.")
     st.write("")
 
-    # O ícone de cada área é desenhado pelo tema global em CSS para manter
-    # o padrão visual verde, grande e consistente da referência aprovada.
+    # O menu inicial não importa serviços, relatórios nem integração biométrica.
+    # Isso reduz o custo de simplesmente entrar no módulo SST.
     with st.container(key="sst_menu_cards"):
         cols = st.columns(3)
         for indice, (rotulo, nome, _) in enumerate(AREAS):
@@ -44,30 +44,46 @@ def _render_menu() -> None:
                 )
 
 
+def _carregar_core(area_ativa: str):
+    import sst_app_core as core
+
+    # Biometria só entra em memória quando a área realmente precisa dela.
+    if area_ativa in ("Colaboradores", "Assinaturas de Documentos"):
+        import sst_app  # noqa: F401
+
+    return core
+
+
+def _abrir_ajuda() -> None:
+    import sst_app_core as core
+    core._popup_ajuda_protocolos()
+
+
 def renderizar_modulo_sst_menu(actor: dict) -> None:
-    core.aplicar_estilo_sst()
-    core.renderizar_cabecalho_modulo()
+    aplicar_estilo_sst()
+    renderizar_cabecalho_modulo()
 
     if mensagem := st.session_state.pop("sst_mensagem", None):
-        core.mostrar_notificacao(mensagem)
+        mostrar_notificacao(mensagem)
 
     area_ativa = st.session_state.get("sst_area_ativa")
 
     _, topo2 = st.columns([6.8, 1.35])
     with topo2:
         if st.button("Ajuda / Protocolos", use_container_width=True, key="sst_ajuda_protocolos_menu"):
-            core._popup_ajuda_protocolos()
+            _abrir_ajuda()
 
     if not area_ativa:
         _render_menu()
         return
 
-    mapa = {nome: render for _, nome, render in AREAS}
-    render = mapa.get(area_ativa)
-    if render is None:
+    mapa = {nome: renderer_name for _, nome, renderer_name in AREAS}
+    renderer_name = mapa.get(area_ativa)
+    if renderer_name is None:
         _voltar_menu()
         st.rerun()
 
+    core = _carregar_core(area_ativa)
     core._inicializar_sst_uma_vez()
 
     st.caption(f"Segurança do Trabalho  ›  {area_ativa}")
@@ -75,4 +91,5 @@ def renderizar_modulo_sst_menu(actor: dict) -> None:
         _voltar_menu()
         st.rerun()
 
+    render = getattr(core, renderer_name)
     render(actor)
