@@ -226,7 +226,7 @@ def gerar_pdf_documento(documento: dict) -> bytes:
         _p("Registro eletrônico", styles["section"]),
         _p(
             f"Documento {documento.get('numero') or '—'} criado em {_data_hora(documento.get('criado_em'))}. "
-            "Após o fechamento, este PDF é preservado no banco de dados e associado ao seu hash SHA-256 para o fluxo de assinatura.",
+            "Após o fechamento, este PDF é preservado em armazenamento seguro e associado ao seu hash SHA-256 para o fluxo de assinatura.",
             styles["body"],
         ),
     ]))
