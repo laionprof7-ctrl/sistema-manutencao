@@ -874,12 +874,16 @@ def _render_dashboard(actor: dict) -> None:
 
 def renderizar_modulo_sst(actor: dict) -> None:
     aplicar_estilo_sst()
+
+    # Renderiza a identidade visual imediatamente. A preparação do banco continua
+    # protegida por cache_resource e só ocorre uma vez por processo.
+    renderizar_cabecalho_modulo()
     _inicializar_sst_uma_vez()
+
     # O cron do Supabase é o responsável pela inativação automática diária.
     # As operações de EPI também validam CA no backend, evitando uma chamada extra a cada rerun da interface.
     if mensagem := st.session_state.pop("sst_mensagem", None):
         mostrar_notificacao(mensagem)
-    renderizar_cabecalho_modulo()
 
     _, col_ajuda = st.columns([7.2, 1.15])
     with col_ajuda:
