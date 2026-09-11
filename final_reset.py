@@ -5,6 +5,7 @@ from sqlalchemy import delete, insert, select, update
 import database as db
 
 RESET_KEY = "final_reset_20260911_v1"
+_PROCESS_DONE = False
 
 
 def _reset_ja_aplicado() -> bool:
@@ -21,9 +22,15 @@ def aplicar_reset_final_uma_vez() -> dict[str, int | bool]:
     """Remove somente dados operacionais de teste, preservando usuários e estrutura.
 
     O marcador em ``contadores`` impede que um restart futuro apague dados reais.
-    PDFs vinculados aos documentos removidos também são apagados do Storage.
+    Dentro do mesmo processo, ``_PROCESS_DONE`` evita até a consulta do marcador
+    nos reruns normais do Streamlit.
     """
+    global _PROCESS_DONE
+    if _PROCESS_DONE:
+        return {"aplicado": False}
+
     if _reset_ja_aplicado():
+        _PROCESS_DONE = True
         return {"aplicado": False}
 
     # Importa a pilha SST só na única execução em que o reset é necessário.
@@ -87,8 +94,6 @@ def aplicar_reset_final_uma_vez() -> dict[str, int | bool]:
         conn.execute(insert(db.CONTADORES).values(chave=RESET_KEY, valor=1))
 
     # Storage é externo ao PostgreSQL. A remoção ocorre somente depois do commit.
-    # Falha individual não compromete a integridade do banco; arquivos órfãos
-    # podem ser removidos posteriormente sem afetar documentos ativos.
     if storage_paths:
         try:
             from sst_services import _storage_excluir
@@ -99,4 +104,5 @@ def aplicar_reset_final_uma_vez() -> dict[str, int | bool]:
             pass
 
     totais["pdfs_storage_solicitados"] = len(storage_paths)
+    _PROCESS_DONE = True
     return totais
