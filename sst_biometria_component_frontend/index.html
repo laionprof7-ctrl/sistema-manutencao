@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>html,body{margin:0;padding:0;background:transparent;height:1px;overflow:hidden}</style>
+</head>
+<body>
+<script>
+(function () {
+  let lastSignature = null;
+
+  function send(type, data) {
+    window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data || {}), "*");
+  }
+
+  function ready() {
+    send("streamlit:componentReady", {apiVersion: 1});
+    send("streamlit:setFrameHeight", {height: 1});
+  }
+
+  function setValue(value) {
+    send("streamlit:setComponentValue", {value: value});
+  }
+
+  async function executar(args) {
+    const signature = JSON.stringify([args.acao, args.request_id, args.payload, args.agent_url]);
+    if (signature === lastSignature) return;
+    lastSignature = signature;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+
+    try {
+      let url = String(args.agent_url || "http://127.0.0.1:8765").replace(/\/$/, "");
+      let options = {
+        method: "GET",
+        mode: "cors",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {"Accept": "application/json"}
+      };
+
+      if (args.acao === "health") {
+        url += "/health";
+      } else {
+        url += args.acao === "cadastro" ? "/cadastro" : "/verificacao";
+        options.method = "POST";
+        options.headers["Content-Type"] = "application/json";
+        options.headers["X-Copa-Agent-Request"] = "1";
+        options.body = JSON.stringify(args.payload || {});
+      }
+
+      const response = await fetch(url, options);
+      let body = null;
+      try { body = await response.json(); } catch (_) { body = null; }
+
+      setValue({
+        request_id: args.request_id,
+        bridge_ok: true,
+        http_status: response.status,
+        ok: response.ok && !!(body && body.ok),
+        body: body
+      });
+    } catch (err) {
+      setValue({
+        request_id: args.request_id,
+        bridge_ok: false,
+        ok: false,
+        erro: err && err.name === "AbortError" ? "AGENT_TIMEOUT" : "AGENT_UNREACHABLE",
+        detalhe: String(err && err.message ? err.message : err)
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    const data = event.data || {};
+    if (data.type === "streamlit:render") executar(data.args || {});
+  });
+
+  ready();
+})();
+</script>
+</body>
+</html>
