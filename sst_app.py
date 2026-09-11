@@ -569,41 +569,54 @@ def _render_documentos(actor: dict) -> None:
     colab_f = f1.selectbox("Colaborador", list(mapa_fc), key="sst_doc_filtro_colab")
     tipo_f = f2.selectbox("Tipo", ["Todos", "Ordem de Serviço de SST", "Entrega de EPI"], key="sst_doc_filtro_tipo")
     status_f = f3.selectbox("Status", ["Todos", "Rascunho", "Aguardando Assinatura", "Assinado"], key="sst_doc_filtro_status")
+
     f4, f5, f6 = st.columns([1, 1, 1.4])
     usar_periodo = f4.checkbox("Filtrar por período", key="sst_doc_usar_periodo")
     hoje = datetime.now(TZ_BAHIA).date()
     inicio = f5.date_input("De", value=hoje - timedelta(days=30), format="DD/MM/YYYY", disabled=not usar_periodo, key="sst_doc_inicio")
     fim = f6.date_input("Até", value=hoje, format="DD/MM/YYYY", disabled=not usar_periodo, key="sst_doc_fim")
+
     busca = st.text_input(
-        "Buscar por número, colaborador, matrícula, título ou motivo",
+        "Busca rápida",
         key="sst_doc_busca",
-        placeholder="Digite para pesquisar...",
+        placeholder="Número, colaborador, matrícula, tipo, status, título ou motivo...",
+        help="A busca é combinada com os filtros acima.",
     )
 
-    # O usuário não precisa escolher limite técnico. A tela consulta até 100 registros por vez;
-    # os demais continuam armazenados e podem ser encontrados pelos filtros e pela busca.
+    # O limite é técnico e invisível para o usuário. Os documentos continuam armazenados normalmente.
     ok, documentos = _executar(
         _documentos_cache, 100, mapa_fc[colab_f], tipo_f, status_f,
         inicio if usar_periodo else None, fim if usar_periodo else None, busca.strip() or None,
     )
-    if not ok: return
-    if documentos:
-        st.dataframe([
-            {"Número": r["numero"], "Data": _data_hora(r["criado_em"]), "Colaborador": r["colaborador"], "Tipo": r["tipo"], "Motivo": r.get("motivo") or "—", "Status": r["status"]}
-            for r in documentos
-        ], use_container_width=True, hide_index=True)
-        st.caption(f"Exibindo {len(documentos)} documento(s) conforme os filtros atuais.")
-    else:
+    if not ok:
+        return
+    if not documentos:
         st.info("Nenhum documento encontrado com os filtros atuais.")
         return
 
-    rascunhos = [r for r in documentos if r["status"] == "Rascunho"]
-    if rascunhos:
-        with st.expander("📄 Gerar PDF e fechar para assinatura"):
-            mapa = {f"{r['numero']} · {r['colaborador']} · {r['titulo']}": r for r in rascunhos}
-            escolha = st.selectbox("Documento", list(mapa), key="sst_fechar_doc"); alvo = mapa[escolha]
-            if st.button("Gerar PDF e fechar", type="primary", use_container_width=True):
-                ok_doc, doc = _executar(obter_documento, int(alvo["id"]))
+    # Tabela operacional: as ações ficam na própria linha do documento.
+    cab = st.columns([1.15, 1.05, 1.55, 1.25, 1.55, 1.2, 0.55])
+    for coluna, titulo in zip(cab, ["Número", "Data", "Colaborador", "Tipo", "Motivo", "Status", "Ação"]):
+        coluna.markdown(f"**{titulo}**")
+    st.divider()
+
+    pdf_pronto = st.session_state.get("sst_pdf_pronto")
+
+    for r in documentos:
+        cols = st.columns([1.15, 1.05, 1.55, 1.25, 1.55, 1.2, 0.55])
+        cols[0].write(r["numero"])
+        cols[1].write(_data_hora(r["criado_em"]))
+        cols[2].write(r["colaborador"])
+        cols[3].write(r["tipo"])
+        cols[4].write(r.get("motivo") or "—")
+        cols[5].write(r["status"])
+
+        doc_id = int(r["id"])
+        status = r["status"]
+
+        if status == "Rascunho":
+            if cols[6].button("📄", key=f"sst_fechar_linha_{doc_id}", help="Gerar PDF e fechar para assinatura"):
+                ok_doc, doc = _executar(obter_documento, doc_id)
                 if ok_doc:
                     pdf = gerar_pdf_documento(doc)
                     tipo_nome = doc["tipo"].replace(" ", "_").replace("/", "-")
@@ -611,26 +624,42 @@ def _render_documentos(actor: dict) -> None:
                     _confirmar_acao(
                         "Fechar documento para assinatura",
                         [("Documento", doc["numero"]), ("Colaborador", doc["colaborador"]), ("Motivo", doc.get("motivo") or "—")],
-                        lambda: fechar_documento_para_assinatura(actor, int(doc["id"]), pdf, nome),
+                        lambda: fechar_documento_para_assinatura(actor, doc_id, pdf, nome),
                         "Documento fechado para assinatura. Hash SHA-256 registrado.",
                     )
 
-    fechados = [r for r in documentos if r["status"] in ("Aguardando Assinatura", "Assinado") and r.get("nome_arquivo")]
-    if fechados:
-        with st.expander("⬇️ Baixar PDF fechado"):
-            mapa = {f"{r['numero']} · {r['colaborador']} · {r['status']}": r for r in fechados}
-            escolha = st.selectbox("PDF", list(mapa), key="sst_download_doc"); alvo = mapa[escolha]
-            ok_pdf, dados = _executar(obter_pdf_documento, int(alvo["id"]))
-            if ok_pdf:
-                pdf, nome, hash_doc = dados
-                st.caption(f"Arquivo selecionado: {nome}")
-                st.caption(f"SHA-256: {hash_doc}")
-                # A chave depende do documento/hash para impedir que o navegador preserve o botão do PDF anterior.
-                st.download_button(
-                    "Baixar PDF", data=pdf, file_name=nome, mime="application/pdf", use_container_width=True,
-                    on_click="ignore", key=f"sst_download_pdf_{alvo['id']}_{str(hash_doc)[:12]}",
+        elif status in ("Aguardando Assinatura", "Assinado") and r.get("nome_arquivo"):
+            pronto_deste = isinstance(pdf_pronto, dict) and pdf_pronto.get("id") == doc_id
+            if pronto_deste:
+                cols[6].download_button(
+                    "⬇️",
+                    data=pdf_pronto["pdf"],
+                    file_name=pdf_pronto["nome"],
+                    mime="application/pdf",
+                    key=f"sst_download_linha_{doc_id}_{str(pdf_pronto.get('hash') or '')[:12]}",
+                    help="Baixar PDF",
+                    on_click="ignore",
                 )
+            elif cols[6].button("⬇️", key=f"sst_preparar_download_{doc_id}", help="Preparar PDF para download"):
+                ok_pdf, dados = _executar(obter_pdf_documento, doc_id)
+                if ok_pdf:
+                    pdf, nome, hash_doc = dados
+                    st.session_state["sst_pdf_pronto"] = {
+                        "id": doc_id,
+                        "pdf": pdf,
+                        "nome": nome,
+                        "hash": hash_doc,
+                    }
+                    st.rerun()
+        else:
+            cols[6].write("—")
 
+        st.divider()
+
+    st.caption(
+        f"Exibindo {len(documentos)} documento(s). "
+        "⬇️ prepara/baixa o PDF fechado; 📄 gera o PDF de um rascunho e o fecha para assinatura."
+    )
 
 def _render_assinaturas() -> None:
     st.subheader("Assinaturas")
