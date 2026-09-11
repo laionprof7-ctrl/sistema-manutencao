@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -667,6 +668,35 @@ def _popup_assinatura_biometrica(selecionado: dict) -> None:
     c1.write(f"**Matrícula:** {selecionado.get('matricula') or '—'}")
     c2.write(f"**Documento:** {selecionado['numero']}")
     c2.write(f"**Tipo:** {selecionado['tipo']}")
+
+    # Para entregas de EPI, mostramos no próprio popup exatamente o que
+    # o colaborador está confirmando que recebeu.
+    if selecionado.get("tipo") == "Entrega de EPI":
+        ok_doc, doc_completo = _executar(obter_documento, int(selecionado["id"]))
+        if ok_doc and doc_completo:
+            try:
+                snapshot = json.loads(doc_completo.get("conteudo_snapshot") or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                snapshot = {}
+
+            itens = snapshot.get("itens") or []
+            motivo = snapshot.get("motivo_entrega") or doc_completo.get("motivo") or "—"
+
+            st.markdown("#### EPIs desta entrega")
+            if itens:
+                tabela_epi = []
+                for item in itens:
+                    tabela_epi.append({
+                        "EPI": item.get("nome") or "—",
+                        "CA": item.get("ca") or "—",
+                        "Quantidade": item.get("quantidade") or "—",
+                        "Unidade": item.get("unidade") or "—",
+                    })
+                st.dataframe(tabela_epi, use_container_width=True, hide_index=True)
+            else:
+                st.warning("Não foi possível localizar os itens desta entrega no documento.")
+
+            st.caption(f"Motivo da entrega: {motivo}")
 
     hash_doc = selecionado.get("hash_documento") or "—"
     with st.expander("Dados de segurança do documento"):
