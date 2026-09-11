@@ -62,15 +62,9 @@ if not APP.exists():
 
 @st.cache_resource(show_spinner=False)
 def _compilar_app():
-    """Lê, ajusta e compila app.py uma única vez por processo/deploy.
-
-    Antes, todo clique/rerun relia o arquivo, fazia várias substituições de texto
-    e compilava novamente o app inteiro. O código compilado pode ser reutilizado
-    com segurança até o próximo deploy, quando o processo é reiniciado.
-    """
+    """Lê, ajusta e compila app.py uma única vez por processo/deploy."""
     codigo = APP.read_text(encoding="utf-8")
 
-    # Leituras ficam em cache por mais tempo. Escritas já limpam os caches.
     codigo = codigo.replace(
         "@st.cache_data(ttl=12, show_spinner=False)",
         "@st.cache_data(ttl=60, show_spinner=False)",
@@ -80,11 +74,15 @@ def _compilar_app():
         "@st.cache_data(ttl=60, show_spinner=False)",
     )
 
-    # Nomes limpos dos módulos.
     codigo = codigo.replace('"🔧 Manutenção"', '"Manutenção"')
     codigo = codigo.replace('"🦺 Segurança do Trabalho"', '"Segurança do Trabalho"')
 
-    # Manutenção é um módulo do Copa Gestão: volta ao portal e não exibe logout interno.
+    # No ambiente de desenvolvimento, o SST usa o novo menu modular.
+    codigo = codigo.replace(
+        "from sst_app import renderizar_modulo_sst",
+        "from sst_entry import renderizar_modulo_sst",
+    )
+
     codigo = codigo.replace(
         '    st.caption("Copa Gestão  ›  Manutenção  ›  Ordens de Serviço")\n'
         '    st.title("Ordens de Serviço")',
