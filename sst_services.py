@@ -708,6 +708,8 @@ def listar_documentos(limite: int = 100, colaborador_id: int | None = None, tipo
             DOCUMENTOS_SST.c.numero.ilike(termo),
             DOCUMENTOS_SST.c.titulo.ilike(termo),
             DOCUMENTOS_SST.c.motivo.ilike(termo),
+            DOCUMENTOS_SST.c.tipo.ilike(termo),
+            DOCUMENTOS_SST.c.status.ilike(termo),
             COLABORADORES.c.nome.ilike(termo),
             COLABORADORES.c.matricula.ilike(termo),
         ))
