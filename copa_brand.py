@@ -130,6 +130,41 @@ def aplicar_tema_global() -> None:
             color: #ffffff !important;
         }}
 
+        /* Menus internos dos módulos: cards grandes, claros e elegantes. */
+        .st-key-sst_menu_cards div.stButton > button,
+        .st-key-manutencao_menu_cards div.stButton > button {{
+            min-height: 132px !important;
+            padding: 1.15rem 1.35rem !important;
+            border: 1px solid rgba(8,123,79,.22) !important;
+            border-radius: 16px !important;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdfc 100%) !important;
+            color: var(--copa-green-deep) !important;
+            font-size: 1.22rem !important;
+            font-weight: 800 !important;
+            letter-spacing: -.01em !important;
+            text-shadow: none !important;
+            box-shadow: 0 8px 22px rgba(0,61,49,.055) !important;
+            white-space: normal !important;
+        }}
+        .st-key-sst_menu_cards div.stButton > button *,
+        .st-key-manutencao_menu_cards div.stButton > button * {{
+            color: var(--copa-green-deep) !important;
+            -webkit-text-fill-color: var(--copa-green-deep) !important;
+            font-size: inherit !important;
+            font-weight: inherit !important;
+        }}
+        .st-key-sst_menu_cards div.stButton > button:hover,
+        .st-key-manutencao_menu_cards div.stButton > button:hover {{
+            transform: translateY(-2px) !important;
+            border-color: rgba(8,123,79,.46) !important;
+            background: linear-gradient(180deg, #ffffff 0%, #f3faf6 100%) !important;
+            box-shadow: 0 12px 28px rgba(0,61,49,.11) !important;
+        }}
+        .st-key-sst_menu_cards [data-testid="stHorizontalBlock"],
+        .st-key-manutencao_menu_cards [data-testid="stHorizontalBlock"] {{
+            gap: 1rem !important;
+        }}
+
         [data-testid="stMetric"] {{
             background: linear-gradient(180deg, #fff, #fbfdfc);
             border: 1px solid var(--copa-line) !important;
@@ -167,6 +202,14 @@ def aplicar_tema_global() -> None:
         [data-testid="stAlert"] {{ border-radius: 12px; }}
         hr {{ border-color: var(--copa-line) !important; }}
 
+        @media (max-width: 900px) {{
+            .st-key-sst_menu_cards div.stButton > button,
+            .st-key-manutencao_menu_cards div.stButton > button {{
+                min-height: 104px !important;
+                font-size: 1.08rem !important;
+            }}
+        }}
+
         @media (max-width: 768px) {{
             [data-testid="stAppViewContainer"] {{ background-attachment: scroll; }}
             .block-container {{
@@ -182,6 +225,12 @@ def aplicar_tema_global() -> None:
             div.stButton > button[kind="primary"] {{
                 min-height: 58px !important;
                 font-size: 1.08rem !important;
+            }}
+            .st-key-sst_menu_cards div.stButton > button,
+            .st-key-manutencao_menu_cards div.stButton > button {{
+                min-height: 88px !important;
+                font-size: 1rem !important;
+                padding: .8rem .65rem !important;
             }}
         }}
         </style>
