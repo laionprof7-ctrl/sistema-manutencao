@@ -21,8 +21,17 @@ def _abrir_area(nome: str) -> None:
 
 
 def _voltar_menu() -> None:
-    st.session_state.pop("sst_area_ativa", None)
-    st.session_state.pop("sst_assinatura_documento", None)
+    # Ao sair de qualquer submódulo, elimina também estados transitórios para
+    # impedir que uma tela anterior seja retomada acidentalmente.
+    for chave in (
+        "sst_area_ativa",
+        "sst_assinatura_documento",
+        "sst_bio_sign_request",
+        "sst_bio_enroll_request",
+        "sst_bio_sign_error",
+        "sst_bio_last_error",
+    ):
+        st.session_state.pop(chave, None)
 
 
 def _render_menu() -> None:
