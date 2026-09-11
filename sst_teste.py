@@ -100,21 +100,22 @@ def _compilar_app():
         '',
     )
 
-    # Ícones monocromáticos permitem que os cards da Manutenção usem a mesma
-    # identidade verde e elegante do menu SST.
+    # Os textos dos cards ficam limpos. Os ícones são desenhados pelo mesmo CSS
+    # verde usado no SST, reutilizando os sete estilos já aprovados.
     substituicoes_menu = {
-        "📝 Abrir Ordem de Serviço": "▤  Abrir Ordem de Serviço",
-        "🔍 Consultar Ordens de Serviço": "⌕  Consultar Ordens de Serviço",
-        "🛠️ Painel da Oficina": "⚙  Painel da Oficina",
-        "🎯 Triagem e Prioridade": "◎  Triagem e Prioridade",
-        "👤 Gestão de Usuários": "●  Gestão de Usuários",
-        "🔑 Alterar minha senha": "◆  Alterar minha senha",
-        "🧾 Auditoria": "▥  Auditoria",
+        "📝 Abrir Ordem de Serviço": "Abrir Ordem de Serviço",
+        "🔍 Consultar Ordens de Serviço": "Consultar Ordens de Serviço",
+        "🛠️ Painel da Oficina": "Painel da Oficina",
+        "🎯 Triagem e Prioridade": "Triagem e Prioridade",
+        "👤 Gestão de Usuários": "Gestão de Usuários",
+        "🔑 Alterar minha senha": "Alterar minha senha",
+        "🧾 Auditoria": "Auditoria",
     }
     for antigo, novo in substituicoes_menu.items():
         codigo = codigo.replace(antigo, novo)
 
-    # Menu da Manutenção no mesmo padrão visual do SST: cards grandes em três colunas.
+    # Menu da Manutenção em três colunas. As chaves dos botões reaproveitam os
+    # seletores de ícone do SST, mas só existem nesta tela, então não há conflito.
     codigo = codigo.replace(
         '    cols = st.columns(2)\n'
         '    for i, (rotulo, destino) in enumerate(opcoes):\n'
@@ -124,11 +125,21 @@ def _compilar_app():
         '            else:\n'
         '                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))',
         '    st.caption("Escolha a área que deseja acessar.")\n'
+        '    icones_menu = {\n'
+        '        "Abrir Chamado": 4,\n'
+        '        "Consultar Chamados": 5,\n'
+        '        "Oficina": 3,\n'
+        '        "Triagem": 0,\n'
+        '        "Usuarios": 1,\n'
+        '        "Minha Senha": 2,\n'
+        '        "Auditoria": 6,\n'
+        '    }\n'
         '    with st.container(key="manutencao_menu_cards"):\n'
         '        cols = st.columns(3)\n'
         '        for i, (rotulo, destino) in enumerate(opcoes):\n'
         '            with cols[i % 3]:\n'
-        '                st.button(rotulo, key=f"menu_{destino}", use_container_width=True, on_click=navegar, args=(destino,))',
+        '                icone = icones_menu.get(destino, i % 7)\n'
+        '                st.button(rotulo, key=f"sst_menu_{icone}", use_container_width=True, on_click=navegar, args=(destino,))',
     )
 
     return compile(codigo, str(APP), "exec")
