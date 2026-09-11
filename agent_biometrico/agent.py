@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from sst_biometria_protocol import PROTOCOL_VERSION, READER_MODEL, gerar_hmac
+from sst_biometria_protocol import PROTOCOL_VERSION, gerar_hmac
 
 HOST = "127.0.0.1"
 PORT = int(os.getenv("SST_BIOMETRIC_AGENT_PORT", "8765"))
@@ -21,60 +21,50 @@ AGENT_ID = os.getenv("SST_BIOMETRIC_AGENT_ID", "copa-sst-windows-agent")
 STATION_NAME = os.getenv("COMPUTERNAME") or os.getenv("HOSTNAME") or "estacao-local"
 ALLOWED_ORIGIN = os.getenv("SST_BIOMETRIC_ALLOWED_ORIGIN", "").strip().rstrip("/")
 
+# Deve ser exatamente o mesmo identificador aceito hoje pelo backend SST.
+BACKEND_READER_MODEL = "Nitgen Hamster DX HFDU06"
+
 
 class SdkNaoConfigurado(RuntimeError):
     pass
 
 
 def _sdk_adapter():
-    """Carrega o adaptador real somente quando o SDK Nitgen estiver instalado.
-
-    O arquivo vendor_nitgen.py NÃO faz parte do scaffold porque depende do SDK
-    proprietário instalado na estação Windows. Sem ele, cadastro/verificação
-    permanecem bloqueados e nunca retornam sucesso simulado.
-    """
+    """Carrega o SDK real. Sem ele cadastro/verificação permanecem bloqueados."""
     try:
         from vendor_nitgen import NitgenAdapter  # type: ignore
+        return NitgenAdapter()
     except Exception as exc:
-        raise SdkNaoConfigurado(
-            "SDK Nitgen/eNBioBSP não configurado nesta estação."
-        ) from exc
-    return NitgenAdapter()
+        raise SdkNaoConfigurado("SDK Nitgen/eNBioBSP não configurado nesta estação.") from exc
 
 
 def _secret() -> str:
     value = os.getenv("SST_BIOMETRIC_AGENT_SECRET", "").strip()
-    if not value:
-        raise RuntimeError("SST_BIOMETRIC_AGENT_SECRET não configurado no agente local.")
     if len(value) < 32:
         raise RuntimeError("SST_BIOMETRIC_AGENT_SECRET deve possuir pelo menos 32 caracteres.")
     return value
-
-
-def _json_bytes(payload: dict[str, Any]) -> bytes:
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _safe_origin(origin: str | None) -> bool:
+def _origin_allowed(origin: str | None) -> bool:
     if not ALLOWED_ORIGIN:
         return origin in (None, "", "null")
     return str(origin or "").rstrip("/") == ALLOWED_ORIGIN
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "CopaSSTBiometricAgent/0.1"
+    server_version = "CopaSSTBiometricAgent/0.2"
 
     def log_message(self, fmt: str, *args) -> None:
-        # Evita despejar payloads biométricos no terminal. Registra só método/caminho/status.
+        # Não registra payloads biométricos.
         sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
 
-    def _cors_headers(self) -> None:
+    def _cors(self) -> None:
         origin = self.headers.get("Origin")
-        if ALLOWED_ORIGIN and _safe_origin(origin):
+        if ALLOWED_ORIGIN and _origin_allowed(origin):
             self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -83,82 +73,70 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
 
     def _send(self, status: int, payload: dict[str, Any]) -> None:
-        body = _json_bytes(payload)
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
-        self._cors_headers()
+        self._cors()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def _reject_origin(self) -> bool:
-        origin = self.headers.get("Origin")
-        if _safe_origin(origin):
+    def _blocked_origin(self) -> bool:
+        if _origin_allowed(self.headers.get("Origin")):
             return False
         self._send(403, {"ok": False, "erro": "ORIGIN_NOT_ALLOWED"})
         return True
 
     def _read_json(self) -> dict[str, Any]:
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = 0
-        if length <= 0 or length > 16_384:
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if not 0 < length <= 16_384:
             raise ValueError("Payload inválido.")
-        raw = self.rfile.read(length)
-        data = json.loads(raw.decode("utf-8"))
+        data = json.loads(self.rfile.read(length).decode("utf-8"))
         if not isinstance(data, dict):
             raise ValueError("Payload inválido.")
         return data
 
     def do_OPTIONS(self) -> None:
-        if self._reject_origin():
+        if self._blocked_origin():
             return
         self.send_response(204)
-        self._cors_headers()
+        self._cors()
         self.end_headers()
 
     def do_GET(self) -> None:
-        if self._reject_origin():
+        if self._blocked_origin():
             return
         if self.path != "/health":
             self._send(404, {"ok": False, "erro": "NOT_FOUND"})
             return
-
-        sdk_ok = True
-        sdk_versao = None
         try:
             adapter = _sdk_adapter()
-            sdk_versao = adapter.sdk_version()
+            sdk_ok, sdk_version = True, adapter.sdk_version()
         except Exception:
-            sdk_ok = False
-
+            sdk_ok, sdk_version = False, None
         self._send(200, {
             "ok": True,
             "agente_id": AGENT_ID,
             "estacao": STATION_NAME,
             "protocolo_versao": PROTOCOL_VERSION,
-            "modelo_leitor": READER_MODEL,
+            "modelo_leitor": BACKEND_READER_MODEL,
             "sdk_configurado": sdk_ok,
-            "sdk_versao": sdk_versao,
+            "sdk_versao": sdk_version,
             "timestamp": _now_iso(),
         })
 
     def do_POST(self) -> None:
-        if self._reject_origin():
+        if self._blocked_origin():
             return
         if self.headers.get("X-Copa-Agent-Request") != "1":
             self._send(400, {"ok": False, "erro": "INVALID_REQUEST"})
             return
-
         if self.path not in {"/cadastro", "/verificacao"}:
             self._send(404, {"ok": False, "erro": "NOT_FOUND"})
             return
 
         try:
-            payload = self._read_json()
-            adapter = _sdk_adapter()
-            segredo = _secret()
+            payload, adapter, segredo = self._read_json(), _sdk_adapter(), _secret()
         except SdkNaoConfigurado as exc:
             self._send(503, {"ok": False, "erro": "SDK_NOT_CONFIGURED", "mensagem": str(exc)})
             return
@@ -169,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.path == "/cadastro":
                 colaborador_id = int(payload["colaborador_id"])
-                resultado = adapter.enroll(colaborador_id=colaborador_id)
+                result = adapter.enroll(colaborador_id=colaborador_id)
                 evidencia = {
                     "protocolo_versao": PROTOCOL_VERSION,
                     "evento_id": secrets.token_urlsafe(24),
@@ -177,11 +155,11 @@ class Handler(BaseHTTPRequestHandler):
                     "timestamp": _now_iso(),
                     "agente_id": AGENT_ID,
                     "estacao": STATION_NAME,
-                    "dispositivo_modelo": READER_MODEL,
-                    "dispositivo_serial": resultado.get("dispositivo_serial"),
-                    "sdk_versao": resultado.get("sdk_versao"),
-                    "referencia_biometrica": resultado["referencia_biometrica"],
-                    "template_hash": resultado.get("template_hash"),
+                    "dispositivo_modelo": BACKEND_READER_MODEL,
+                    "dispositivo_serial": result.get("dispositivo_serial"),
+                    "sdk_versao": result.get("sdk_versao"),
+                    "referencia_biometrica": result["referencia_biometrica"],
+                    "template_hash": result.get("template_hash"),
                     "resultado": "CADASTRADO",
                     "score_verificacao": None,
                     "colaborador_id": colaborador_id,
@@ -191,11 +169,8 @@ class Handler(BaseHTTPRequestHandler):
                 documento_id = int(payload["documento_id"])
                 hash_documento = str(payload["hash_documento"]).strip().lower()
                 referencia = str(payload["referencia_biometrica"]).strip()
-                resultado = adapter.verify(
-                    colaborador_id=colaborador_id,
-                    referencia_biometrica=referencia,
-                )
-                if resultado.get("validado") is not True:
+                result = adapter.verify(colaborador_id=colaborador_id, referencia_biometrica=referencia)
+                if result.get("validado") is not True:
                     self._send(401, {"ok": False, "erro": "BIOMETRIA_NAO_CONFIRMADA"})
                     return
                 evidencia = {
@@ -205,19 +180,18 @@ class Handler(BaseHTTPRequestHandler):
                     "timestamp": _now_iso(),
                     "agente_id": AGENT_ID,
                     "estacao": STATION_NAME,
-                    "dispositivo_modelo": READER_MODEL,
-                    "dispositivo_serial": resultado.get("dispositivo_serial"),
-                    "sdk_versao": resultado.get("sdk_versao"),
+                    "dispositivo_modelo": BACKEND_READER_MODEL,
+                    "dispositivo_serial": result.get("dispositivo_serial"),
+                    "sdk_versao": result.get("sdk_versao"),
                     "referencia_biometrica": referencia,
                     "template_hash": None,
                     "resultado": "VALIDADO",
-                    "score_verificacao": resultado.get("score_verificacao"),
+                    "score_verificacao": result.get("score_verificacao"),
                     "colaborador_id": colaborador_id,
                     "documento_id": documento_id,
                     "hash_documento": hash_documento,
                 }
 
-            # Nunca incluir imagem/template bruto na resposta.
             evidencia["assinatura_hmac"] = gerar_hmac(evidencia, segredo)
             self._send(200, {"ok": True, "evidencia": evidencia})
         except Exception as exc:
@@ -225,11 +199,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    # Valida segredo já na subida; falha fechada em vez de iniciar inseguro.
-    _secret()
+    _secret()  # falha fechada caso o segredo não esteja configurado
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Copa SST Biometric Agent ouvindo somente em http://{HOST}:{PORT}")
-    print(f"Origem autorizada: {ALLOWED_ORIGIN or '(somente chamadas sem Origin durante configuração local)'}")
+    print(f"Copa SST Biometric Agent em http://{HOST}:{PORT}")
+    print(f"Origem autorizada: {ALLOWED_ORIGIN or '(configuração local)'}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
