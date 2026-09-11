@@ -120,8 +120,7 @@ def aplicar_tema_global() -> None:
             color: #ffffff !important;
         }}
 
-        /* Cards dos menus internos. Seletores deliberadamente simples para
-           acompanhar a estrutura atual do Streamlit Community Cloud. */
+        /* Cards dos menus internos. */
         .st-key-sst_menu_cards button,
         .st-key-manutencao_menu_cards button {{
             min-height: 158px !important;
@@ -137,7 +136,6 @@ def aplicar_tema_global() -> None:
         }}
         .st-key-sst_menu_cards button p,
         .st-key-manutencao_menu_cards button p {{
-            width: 100% !important;
             margin: 0 !important;
             color: var(--copa-green-deep) !important;
             -webkit-text-fill-color: var(--copa-green-deep) !important;
@@ -147,7 +145,38 @@ def aplicar_tema_global() -> None:
             text-align: left !important;
             letter-spacing: -.015em !important;
         }}
-        .st-key-sst_menu_cards button p::first-letter,
+
+        /* SST: ícones grandes, verdes e consistentes com a referência aprovada. */
+        .st-key-sst_menu_cards button {{
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            gap: 1.45rem !important;
+            text-align: left !important;
+        }}
+        .st-key-sst_menu_cards button::before {{
+            content: "";
+            display: block;
+            flex: 0 0 76px;
+            width: 76px;
+            height: 76px;
+            background: linear-gradient(180deg, #14875b 0%, #005b46 100%);
+            -webkit-mask-position: center;
+            mask-position: center;
+            -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+            -webkit-mask-size: contain;
+            mask-size: contain;
+        }}
+        .st-key-sst_menu_0 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3QgeD0iNiIgeT0iMzQiIHdpZHRoPSIxMiIgaGVpZ2h0PSIyNCIgcng9IjIiLz48cmVjdCB4PSIyNiIgeT0iMjIiIHdpZHRoPSIxMiIgaGVpZ2h0PSIzNiIgcng9IjIiLz48cmVjdCB4PSI0NiIgeT0iOCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjUwIiByeD0iMiIvPjwvc3ZnPg=="); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3QgeD0iNiIgeT0iMzQiIHdpZHRoPSIxMiIgaGVpZ2h0PSIyNCIgcng9IjIiLz48cmVjdCB4PSIyNiIgeT0iMjIiIHdpZHRoPSIxMiIgaGVpZ2h0PSIzNiIgcng9IjIiLz48cmVjdCB4PSI0NiIgeT0iOCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjUwIiByeD0iMiIvPjwvc3ZnPg=="); }}
+        .st-key-sst_menu_1 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGNpcmNsZSBjeD0iMzIiIGN5PSIyMCIgcj0iMTAiLz48Y2lyY2xlIGN4PSIxNCIgY3k9IjI1IiByPSI3Ii8+PGNpcmNsZSBjeD0iNTAiIGN5PSIyNSIgcj0iNyIvPjxwYXRoIGQ9Ik0xNyA1NmMwLTExIDYtMjAgMTUtMjBzMTUgOSAxNSAyMEgxN3oiLz48cGF0aCBkPSJNMiA1NmMwLTEwIDQtMTggMTItMTggNCAwIDcgMiA5IDUtNCA0LTYgOS02IDEzSDJ6Ii8+PHBhdGggZD0iTTQ3IDU2YzAtNC0yLTktNi0xMyAyLTMgNS01IDktNSA4IDAgMTIgOCAxMiAxOEg0N3oiLz48L3N2Zz4="); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGNpcmNsZSBjeD0iMzIiIGN5PSIyMCIgcj0iMTAiLz48Y2lyY2xlIGN4PSIxNCIgY3k9IjI1IiByPSI3Ii8+PGNpcmNsZSBjeD0iNTAiIGN5PSIyNSIgcj0iNyIvPjxwYXRoIGQ9Ik0xNyA1NmMwLTExIDYtMjAgMTUtMjBzMTUgOSAxNSAyMEgxN3oiLz48cGF0aCBkPSJNMiA1NmMwLTEwIDQtMTggMTItMTggNCAwIDcgMiA5IDUtNCA0LTYgOS02IDEzSDJ6Ii8+PHBhdGggZD0iTTQ3IDU2YzAtNC0yLTktNi0xMyAyLTMgNS01IDktNSA4IDAgMTIgOCAxMiAxOEg0N3oiLz48L3N2Zz4="); }}
+        .st-key-sst_menu_2 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMzIgMyA1NiAxMnYxN2MwIDE1LTkgMjYtMjQgMzJDMTcgNTUgOCA0NCA4IDI5VjEyTDMyIDN6bTAgN0wxNCAxN3YxMmMwIDExIDYgMTkgMTggMjUgMTItNiAxOC0xNCAxOC0yNVYxN2wtMTgtN3ptMCA2IDEyIDV2OGMwIDgtNCAxNC0xMiAxOS04LTUtMTItMTEtMTItMTl2LThsMTItNXoiLz48L3N2Zz4="); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMzIgMyA1NiAxMnYxN2MwIDE1LTkgMjYtMjQgMzJDMTcgNTUgOCA0NCA4IDI5VjEyTDMyIDN6bTAgN0wxNCAxN3YxMmMwIDExIDYgMTkgMTggMjUgMTItNiAxOC0xNCAxOC0yNVYxN2wtMTgtN3ptMCA2IDEyIDV2OGMwIDgtNCAxNC0xMiAxOS04LTUtMTItMTEtMTItMTl2LThsMTItNXoiLz48L3N2Zz4="); }}
+        .st-key-sst_menu_3 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0iTTEwIDM4YzAtMTUgOC0yNyAyMi0yOXYxN2g1VjljMTEgMiAxOSAxMiAyMCAyNWw1IDR2Nkgydi02aDh6Ii8+PHBhdGggZD0iTTcgNDhoNTBjLTMgOC0xMiAxMi0yNSAxMlMxMCA1NiA3IDQ4eiIvPjwvc3ZnPg=="); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0iTTEwIDM4YzAtMTUgOC0yNyAyMi0yOXYxN2g1VjljMTEgMiAxOSAxMiAyMCAyNWw1IDR2Nkgydi02aDh6Ii8+PHBhdGggZD0iTTcgNDhoNTBjLTMgOC0xMiAxMi0yNSAxMlMxMCA1NiA3IDQ4eiIvPjwvc3ZnPg=="); }}
+        .st-key-sst_menu_4 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0iTTIwIDRoMjZsMTAgMTB2MjdIMzh2LTZoMTJWMThINDJWMTBIMjB2MjNoLTZWNGg2eiIvPjxwYXRoIGQ9Ik0yNSAxOGgxNXY1SDI1em0wIDEwaDE4djVIMjV6Ii8+PHBhdGggZD0iTTQgNDJjNi01IDEyLTYgMTgtMmw2IDRoMTFjNSAwIDggMyA4IDdIMjVsLTgtNC0xMCA1LTMtMTB6bTIwIDhoMjRjNCAwIDcgMiA4IDZIMjRsLTEyIDQtOC01IDIwLTV6Ii8+PC9zdmc+"); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0iTTIwIDRoMjZsMTAgMTB2MjdIMzh2LTZoMTJWMThINDJWMTBIMjB2MjNoLTZWNGg2eiIvPjxwYXRoIGQ9Ik0yNSAxOGgxNXY1SDI1em0wIDEwaDE4djVIMjV6Ii8+PHBhdGggZD0iTTQgNDJjNi01IDEyLTYgMTgtMmw2IDRoMTFjNSAwIDggMyA4IDdIMjVsLTgtNC0xMCA1LTMtMTB6bTIwIDhoMjRjNCAwIDcgMiA4IDZIMjRsLTEyIDQtOC01IDIwLTV6Ii8+PC9zdmc+"); }}
+        .st-key-sst_menu_5 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTIgNGgyN2wxMyAxM3Y0M0gxMlY0em03IDd2NDJoMjZWMjJIMzRWMTFIMTl6bTIyIDMgNyA3aC03di03eiIvPjxwYXRoIGQ9Ik0yNCAzMGgxNnY1SDI0em0wIDEwaDE2djVIMjR6Ii8+PC9zdmc+"); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTIgNGgyN2wxMyAxM3Y0M0gxMlY0em03IDd2NDJoMjZWMjJIMzRWMTFIMTl6bTIyIDMgNyA3aC03di03eiIvPjxwYXRoIGQ9Ik0yNCAzMGgxNnY1SDI0em0wIDEwaDE2djVIMjR6Ii8+PC9zdmc+"); }}
+        .st-key-sst_menu_6 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0ibTQ1IDUgMTQgMTQtMzEgMzEtMTcgNCA0LTE3TDQ1IDV6bTAgOEwyMSAzN2w2IDYgMjQtMjQtNi02eiIvPjxwYXRoIGQ9Ik00IDU3YzktNSAxNS01IDIyLTEgNSAzIDkgMyAxMyAwIDUtNCAxMC00IDIxIDF2NUg0di01eiIvPjwvc3ZnPg=="); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0ibTQ1IDUgMTQgMTQtMzEgMzEtMTcgNCA0LTE3TDQ1IDV6bTAgOEwyMSAzN2w2IDYgMjQtMjQtNi02eiIvPjxwYXRoIGQ9Ik00IDU3YzktNSAxNS01IDIyLTEgNSAzIDkgMyAxMyAwIDUtNCAxMC00IDIxIDF2NUg0di01eiIvPjwvc3ZnPg=="); }}
+
+        /* A Manutenção ainda usa símbolos de texto nos rótulos. */
         .st-key-manutencao_menu_cards button p::first-letter {{
             font-size: 3.05rem !important;
             font-weight: 700 !important;
@@ -155,6 +184,7 @@ def aplicar_tema_global() -> None:
             color: var(--copa-green-dark) !important;
             -webkit-text-fill-color: var(--copa-green-dark) !important;
         }}
+
         .st-key-sst_menu_cards button:hover,
         .st-key-manutencao_menu_cards button:hover {{
             transform: translateY(-2px) !important;
@@ -201,7 +231,7 @@ def aplicar_tema_global() -> None:
             .st-key-manutencao_menu_cards button {{ min-height: 120px !important; height: 120px !important; }}
             .st-key-sst_menu_cards button p,
             .st-key-manutencao_menu_cards button p {{ font-size: 1.12rem !important; }}
-            .st-key-sst_menu_cards button p::first-letter,
+            .st-key-sst_menu_cards button::before {{ flex-basis: 58px; width: 58px; height: 58px; }}
             .st-key-manutencao_menu_cards button p::first-letter {{ font-size: 2.4rem !important; }}
         }}
 
@@ -214,9 +244,10 @@ def aplicar_tema_global() -> None:
             button[data-testid="stBaseButton-primary"], div.stButton > button[kind="primary"] {{ min-height: 58px !important; font-size: 1.08rem !important; }}
             .st-key-sst_menu_cards button,
             .st-key-manutencao_menu_cards button {{ min-height: 96px !important; height: 96px !important; padding: .8rem .75rem !important; }}
+            .st-key-sst_menu_cards button {{ gap: .8rem !important; }}
             .st-key-sst_menu_cards button p,
             .st-key-manutencao_menu_cards button p {{ font-size: .98rem !important; }}
-            .st-key-sst_menu_cards button p::first-letter,
+            .st-key-sst_menu_cards button::before {{ flex-basis: 44px; width: 44px; height: 44px; }}
             .st-key-manutencao_menu_cards button p::first-letter {{ font-size: 2rem !important; }}
         }}
         </style>
