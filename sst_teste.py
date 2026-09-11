@@ -1,72 +1,18 @@
-"""Entrada estável e profissional do ambiente de desenvolvimento SST/EPI."""
+"""
+Entrada do ambiente de desenvolvimento.
 
-from __future__ import annotations
+O Streamlit Community Cloud ainda inicia este arquivo na branch
+desenvolvimento-sst. Para evitar dois portais concorrentes, este arquivo
+executa o app.py completo (Copa Gestão), que passa a ser a única fonte
+da navegação, autenticação e controle de sessão.
+"""
 
-import streamlit as st
+from pathlib import Path
 
-from sst_ui import (
-    aplicar_estilo_sst,
-    renderizar_aviso_desenvolvimento,
-    renderizar_portal_inicial,
-    renderizar_topo_portal,
-)
+APP = Path(__file__).with_name("app.py")
 
-st.set_page_config(
-    page_title="Copa Gestão | SST/EPI",
-    page_icon="🦺",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+if not APP.exists():
+    raise FileNotFoundError("app.py não encontrado ao lado de sst_teste.py")
 
-aplicar_estilo_sst()
-renderizar_aviso_desenvolvimento()
-
-if "sst_modulo_aberto" not in st.session_state:
-    st.session_state["sst_modulo_aberto"] = False
-
-if not st.session_state["sst_modulo_aberto"]:
-    renderizar_topo_portal()
-    renderizar_portal_inicial()
-
-    _, centro, _ = st.columns([1.15, 3.7, 1.15])
-    with centro:
-        if st.button(
-            "Entrar no módulo SST/EPI",
-            type="primary",
-            use_container_width=True,
-        ):
-            st.session_state["sst_modulo_aberto"] = True
-            st.rerun()
-
-        st.markdown(
-            """
-            <div class="sst-module-line">
-                Colaboradores • Controle de CA • Entregas de EPI • Documentos / OS de SST • Assinaturas
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-else:
-    try:
-        from sst_app import renderizar_modulo_sst
-
-        actor_teste = {
-            "usuario": "admin",
-            "nome": "Ambiente de Desenvolvimento",
-            "nivel": 4.0,
-        }
-
-        col_voltar, _ = st.columns([1.4, 6])
-        with col_voltar:
-            if st.button("← Voltar ao portal SST", use_container_width=True):
-                st.session_state["sst_modulo_aberto"] = False
-                st.rerun()
-
-        renderizar_modulo_sst(actor_teste)
-    except Exception as exc:
-        st.error("Não foi possível carregar o módulo SST/EPI.")
-        st.exception(exc)
-
-        if st.button("Voltar ao portal SST", type="primary"):
-            st.session_state["sst_modulo_aberto"] = False
-            st.rerun()
+codigo = APP.read_text(encoding="utf-8")
+exec(compile(codigo, str(APP), "exec"), {"__name__": "__main__", "__file__": str(APP)})
