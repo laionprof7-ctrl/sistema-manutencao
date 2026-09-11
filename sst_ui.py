@@ -32,35 +32,30 @@ def aplicar_estilo_sst() -> None:
         }
         header[data-testid="stHeader"] { background: transparent; }
 
-        /* Leitura mais confortável sem exagerar no tamanho da interface. */
         .block-container p,
         .block-container label,
         .block-container [data-testid="stCaptionContainer"],
         .block-container [data-testid="stMarkdownContainer"] p {
-            font-size: 1rem !important;
-            line-height: 1.52 !important;
+            font-size: 1.075rem !important;
+            line-height: 1.55 !important;
         }
-        .block-container h2 { font-size: 1.72rem !important; }
-        .block-container h3 { font-size: 1.45rem !important; }
-        .block-container h4 { font-size: 1.18rem !important; }
+        .block-container h2 { font-size: 1.82rem !important; }
+        .block-container h3 { font-size: 1.54rem !important; }
+        .block-container h4 { font-size: 1.24rem !important; }
 
-        /* Navegação horizontal do SST. */
         [data-testid="stRadio"] label p {
-            font-size: 1rem !important;
-            font-weight: 650 !important;
+            font-size: 1.065rem !important;
+            font-weight: 675 !important;
         }
-        [data-testid="stRadio"] > div {
-            gap: .45rem .8rem !important;
-        }
+        [data-testid="stRadio"] > div { gap: .5rem .9rem !important; }
 
-        /* Formulários e filtros. */
         .stSelectbox label,
         .stTextInput label,
         .stNumberInput label,
         .stDateInput label,
         .stTextArea label,
         .stCheckbox label {
-            font-size: .98rem !important;
+            font-size: 1.04rem !important;
             font-weight: 650 !important;
         }
         .stSelectbox [data-baseweb="select"] > div,
@@ -68,27 +63,27 @@ def aplicar_estilo_sst() -> None:
         .stNumberInput input,
         .stDateInput input,
         .stTextArea textarea {
-            font-size: 1rem !important;
+            font-size: 1.065rem !important;
         }
 
         [data-testid="stMetric"] {
             border: 1px solid var(--copa-line);
             border-radius: 16px;
-            padding: 18px 20px;
+            padding: 19px 21px;
             background: #ffffff;
             box-shadow: 0 8px 24px rgba(15,23,42,.04);
-            min-height: 116px;
+            min-height: 120px;
         }
-        [data-testid="stMetricLabel"] { font-weight: 700; color: var(--copa-muted); font-size: 1rem !important; }
-        [data-testid="stMetricValue"] { font-weight: 800; color: var(--copa-ink); font-size: 2rem !important; }
+        [data-testid="stMetricLabel"] { font-weight: 700; color: var(--copa-muted); font-size: 1.06rem !important; }
+        [data-testid="stMetricValue"] { font-weight: 800; color: var(--copa-ink); font-size: 2.1rem !important; }
 
         div.stButton > button,
         div.stDownloadButton > button,
         button[data-testid="stBaseButton-primary"],
         button[data-testid="stBaseButton-secondary"] {
             border-radius: 11px !important;
-            min-height: 2.9rem;
-            font-size: .98rem !important;
+            min-height: 3rem;
+            font-size: 1.04rem !important;
             font-weight: 700 !important;
         }
         div.stButton > button[kind="primary"],
@@ -104,29 +99,28 @@ def aplicar_estilo_sst() -> None:
         }
 
         [data-testid="stExpander"] { border-radius: 12px; overflow: hidden; }
-        [data-testid="stExpander"] summary p { font-size: 1rem !important; font-weight: 650 !important; }
+        [data-testid="stExpander"] summary p { font-size: 1.065rem !important; font-weight: 650 !important; }
 
-        /* Tabelas HTML do histórico de EPI. */
-        table.sst-table { font-size: 1rem !important; }
-        table.sst-table th, table.sst-table td { padding: 12px 14px !important; }
+        table.sst-table { font-size: 1.06rem !important; }
+        table.sst-table th, table.sst-table td { padding: 13px 15px !important; }
 
         .sst-brand-tag {
-            font-size: .82rem;
+            font-size: .86rem;
             letter-spacing: .08em;
             text-transform: uppercase;
             color: var(--copa-muted);
             font-weight: 800;
             margin-bottom: 4px;
         }
-        .sst-brand-title { color: var(--copa-ink); font-size: 1.06rem; font-weight: 800; }
-        .sst-section-note { border-left: 4px solid var(--copa-green); padding: .8rem 1rem; background: rgba(8,123,79,.045); border-radius: 0 10px 10px 0; margin: .5rem 0 1rem; }
-        .sst-dev-note { border: 1px solid #f2df8c; background: #fffbea; color: #846300; padding: 12px 16px; border-radius: 12px; margin-bottom: 10px; font-size: .96rem; }
+        .sst-brand-title { color: var(--copa-ink); font-size: 1.12rem; font-weight: 800; }
+        .sst-section-note { border-left: 4px solid var(--copa-green); padding: .85rem 1.05rem; background: rgba(8,123,79,.045); border-radius: 0 10px 10px 0; margin: .5rem 0 1rem; }
+        .sst-dev-note { border: 1px solid #f2df8c; background: #fffbea; color: #846300; padding: 12px 16px; border-radius: 12px; margin-bottom: 10px; font-size: 1rem; }
 
         @media (max-width: 768px) {
             .block-container p,
             .block-container label,
-            .block-container [data-testid="stMarkdownContainer"] p { font-size: .96rem !important; }
-            [data-testid="stRadio"] label p { font-size: .94rem !important; }
+            .block-container [data-testid="stMarkdownContainer"] p { font-size: 1rem !important; }
+            [data-testid="stRadio"] label p { font-size: .98rem !important; }
         }
         </style>
         """,
@@ -145,7 +139,7 @@ def renderizar_logo(width: int = 180) -> None:
 def renderizar_topo_portal() -> None:
     esquerda, direita = st.columns([4.5, 1.5], vertical_alignment="center")
     with esquerda:
-        renderizar_logo(210)
+        renderizar_logo(225)
     with direita:
         st.markdown('<div style="text-align:right"><div class="sst-brand-tag">Copa Gestão</div><div class="sst-brand-title">Segurança do Trabalho</div></div>', unsafe_allow_html=True)
 
@@ -158,7 +152,7 @@ def renderizar_cabecalho_modulo() -> None:
     """Cabeçalho interno enxuto do módulo."""
     esquerda, direita = st.columns([5, 1.35], vertical_alignment="center")
     with esquerda:
-        renderizar_logo(190)
+        renderizar_logo(210)
     with direita:
         st.caption("COPA GESTÃO")
         st.markdown("**Segurança do Trabalho**")
