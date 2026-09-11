@@ -63,10 +63,7 @@ def aplicar_tema_global() -> None:
             background: rgba(250,253,251,.975);
             border-right: 1px solid var(--copa-line);
         }}
-        [data-testid="stSidebar"] img {{
-            max-width: 210px;
-            margin: .3rem auto 1rem;
-        }}
+        [data-testid="stSidebar"] img {{ max-width: 210px; margin: .3rem auto 1rem; }}
 
         h1, h2, h3 {{ color: var(--copa-ink) !important; letter-spacing: -.025em; }}
         h1 {{ font-weight: 800 !important; }}
@@ -80,10 +77,7 @@ def aplicar_tema_global() -> None:
             line-height: 1.56 !important;
         }}
         [data-testid="stCaptionContainer"] p,
-        .stCaption {{
-            font-size: 1rem !important;
-            line-height: 1.48 !important;
-        }}
+        .stCaption {{ font-size: 1rem !important; line-height: 1.48 !important; }}
 
         div.stButton > button,
         div.stDownloadButton > button {{
@@ -113,11 +107,7 @@ def aplicar_tema_global() -> None:
             text-shadow: 0 1px 2px rgba(0,0,0,.22);
         }}
         button[data-testid="stBaseButton-primary"] *,
-        div.stButton > button[kind="primary"] *,
-        button[data-testid="stBaseButton-primary"] p,
-        div.stButton > button[kind="primary"] p,
-        button[data-testid="stBaseButton-primary"] span,
-        div.stButton > button[kind="primary"] span {{
+        div.stButton > button[kind="primary"] * {{
             color: #ffffff !important;
             opacity: 1 !important;
             font-size: inherit !important;
@@ -130,40 +120,50 @@ def aplicar_tema_global() -> None:
             color: #ffffff !important;
         }}
 
-        /* Menus internos dos módulos: cards grandes, claros e elegantes. */
-        .st-key-sst_menu_cards div.stButton > button,
-        .st-key-manutencao_menu_cards div.stButton > button {{
-            min-height: 132px !important;
-            padding: 1.15rem 1.35rem !important;
-            border: 1px solid rgba(8,123,79,.22) !important;
-            border-radius: 16px !important;
-            background: linear-gradient(180deg, #ffffff 0%, #fbfdfc 100%) !important;
+        /* Cards dos menus internos. Seletores deliberadamente simples para
+           acompanhar a estrutura atual do Streamlit Community Cloud. */
+        .st-key-sst_menu_cards button,
+        .st-key-manutencao_menu_cards button {{
+            min-height: 158px !important;
+            height: 158px !important;
+            padding: 1.35rem 1.6rem !important;
+            border: 1px solid rgba(8,123,79,.23) !important;
+            border-radius: 15px !important;
+            background: #ffffff !important;
             color: var(--copa-green-deep) !important;
-            font-size: 1.22rem !important;
-            font-weight: 800 !important;
-            letter-spacing: -.01em !important;
-            text-shadow: none !important;
-            box-shadow: 0 8px 22px rgba(0,61,49,.055) !important;
+            box-shadow: 0 7px 20px rgba(0,61,49,.045) !important;
             white-space: normal !important;
+            text-shadow: none !important;
         }}
-        .st-key-sst_menu_cards div.stButton > button *,
-        .st-key-manutencao_menu_cards div.stButton > button * {{
+        .st-key-sst_menu_cards button p,
+        .st-key-manutencao_menu_cards button p {{
+            width: 100% !important;
+            margin: 0 !important;
             color: var(--copa-green-deep) !important;
             -webkit-text-fill-color: var(--copa-green-deep) !important;
-            font-size: inherit !important;
-            font-weight: inherit !important;
+            font-size: 1.34rem !important;
+            line-height: 1.28 !important;
+            font-weight: 850 !important;
+            text-align: left !important;
+            letter-spacing: -.015em !important;
         }}
-        .st-key-sst_menu_cards div.stButton > button:hover,
-        .st-key-manutencao_menu_cards div.stButton > button:hover {{
+        .st-key-sst_menu_cards button p::first-letter,
+        .st-key-manutencao_menu_cards button p::first-letter {{
+            font-size: 3.05rem !important;
+            font-weight: 700 !important;
+            line-height: .8 !important;
+            color: var(--copa-green-dark) !important;
+            -webkit-text-fill-color: var(--copa-green-dark) !important;
+        }}
+        .st-key-sst_menu_cards button:hover,
+        .st-key-manutencao_menu_cards button:hover {{
             transform: translateY(-2px) !important;
-            border-color: rgba(8,123,79,.46) !important;
-            background: linear-gradient(180deg, #ffffff 0%, #f3faf6 100%) !important;
-            box-shadow: 0 12px 28px rgba(0,61,49,.11) !important;
+            border-color: rgba(8,123,79,.52) !important;
+            background: #f8fcfa !important;
+            box-shadow: 0 13px 30px rgba(0,61,49,.11) !important;
         }}
         .st-key-sst_menu_cards [data-testid="stHorizontalBlock"],
-        .st-key-manutencao_menu_cards [data-testid="stHorizontalBlock"] {{
-            gap: 1rem !important;
-        }}
+        .st-key-manutencao_menu_cards [data-testid="stHorizontalBlock"] {{ gap: 1rem !important; }}
 
         [data-testid="stMetric"] {{
             background: linear-gradient(180deg, #fff, #fbfdfc);
@@ -175,19 +175,13 @@ def aplicar_tema_global() -> None:
         [data-testid="stMetricLabel"] p {{ font-size: 1.04rem !important; font-weight: 700 !important; }}
         [data-testid="stMetricValue"] {{ color: var(--copa-green-dark) !important; font-weight: 800 !important; }}
 
-        [data-testid="stExpander"],
-        [data-testid="stForm"] {{
+        [data-testid="stExpander"], [data-testid="stForm"] {{
             border-color: var(--copa-line) !important;
             border-radius: 14px !important;
             background: rgba(255,255,255,.76);
         }}
         [data-testid="stExpander"] summary p {{ font-size: 1.06rem !important; }}
-
-        [data-testid="stDataFrame"] {{
-            border: 1px solid var(--copa-line);
-            border-radius: 13px;
-            overflow: hidden;
-        }}
+        [data-testid="stDataFrame"] {{ border: 1px solid var(--copa-line); border-radius: 13px; overflow: hidden; }}
 
         .stTextInput input, .stNumberInput input, .stTextArea textarea,
         .stDateInput input, [data-baseweb="select"] > div {{
@@ -203,35 +197,27 @@ def aplicar_tema_global() -> None:
         hr {{ border-color: var(--copa-line) !important; }}
 
         @media (max-width: 900px) {{
-            .st-key-sst_menu_cards div.stButton > button,
-            .st-key-manutencao_menu_cards div.stButton > button {{
-                min-height: 104px !important;
-                font-size: 1.08rem !important;
-            }}
+            .st-key-sst_menu_cards button,
+            .st-key-manutencao_menu_cards button {{ min-height: 120px !important; height: 120px !important; }}
+            .st-key-sst_menu_cards button p,
+            .st-key-manutencao_menu_cards button p {{ font-size: 1.12rem !important; }}
+            .st-key-sst_menu_cards button p::first-letter,
+            .st-key-manutencao_menu_cards button p::first-letter {{ font-size: 2.4rem !important; }}
         }}
 
         @media (max-width: 768px) {{
             [data-testid="stAppViewContainer"] {{ background-attachment: scroll; }}
-            .block-container {{
-                margin: .35rem;
-                padding: 1rem .85rem 1.6rem !important;
-                border-radius: 18px;
-            }}
+            .block-container {{ margin: .35rem; padding: 1rem .85rem 1.6rem !important; border-radius: 18px; }}
             h1 {{ font-size: 1.85rem !important; }}
             h2 {{ font-size: 1.45rem !important; }}
-            .block-container p,
-            .block-container label {{ font-size: 1rem !important; }}
-            button[data-testid="stBaseButton-primary"],
-            div.stButton > button[kind="primary"] {{
-                min-height: 58px !important;
-                font-size: 1.08rem !important;
-            }}
-            .st-key-sst_menu_cards div.stButton > button,
-            .st-key-manutencao_menu_cards div.stButton > button {{
-                min-height: 88px !important;
-                font-size: 1rem !important;
-                padding: .8rem .65rem !important;
-            }}
+            .block-container p, .block-container label {{ font-size: 1rem !important; }}
+            button[data-testid="stBaseButton-primary"], div.stButton > button[kind="primary"] {{ min-height: 58px !important; font-size: 1.08rem !important; }}
+            .st-key-sst_menu_cards button,
+            .st-key-manutencao_menu_cards button {{ min-height: 96px !important; height: 96px !important; padding: .8rem .75rem !important; }}
+            .st-key-sst_menu_cards button p,
+            .st-key-manutencao_menu_cards button p {{ font-size: .98rem !important; }}
+            .st-key-sst_menu_cards button p::first-letter,
+            .st-key-manutencao_menu_cards button p::first-letter {{ font-size: 2rem !important; }}
         }}
         </style>
         """,
