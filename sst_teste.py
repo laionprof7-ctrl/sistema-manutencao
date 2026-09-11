@@ -16,22 +16,20 @@ from copa_brand import instalar_tema_apos_page_config
 
 instalar_tema_apos_page_config()
 
-# Usa a inicialização otimizada antes de qualquer import do módulo SST.
-# Assim, quando sst_app_core importar inicializar_banco_sst, já receberá
-# a versão que reduz leituras repetidas de metadados no PostgreSQL.
-try:
-    import sst_database
-    from sst_fast_init import inicializar_banco_sst_rapido
-
-    sst_database.inicializar_banco_sst = inicializar_banco_sst_rapido
-except Exception:
-    # Em caso de incompatibilidade inesperada, o módulo SST ainda poderá
-    # usar a inicialização original em vez de impedir o acesso ao sistema.
-    pass
-
-# Limpeza de retenção somente quando o usuário entra no SST e, no máximo,
-# uma vez por hora por sessão. Isso evita trabalho de banco no login/Manutenção.
+# Não carregamos a pilha SST no login, Portal ou Manutenção. Ela só entra
+# na memória quando o usuário realmente abre Segurança do Trabalho.
 if st.session_state.get("aba_ativa") == "SST":
+    try:
+        import sst_database
+        from sst_fast_init import inicializar_banco_sst_rapido
+
+        sst_database.inicializar_banco_sst = inicializar_banco_sst_rapido
+    except Exception:
+        # Em caso de incompatibilidade inesperada, o módulo SST ainda poderá
+        # usar a inicialização original em vez de impedir o acesso ao sistema.
+        pass
+
+    # Limpeza de retenção no máximo uma vez por hora por sessão.
     agora = time.time()
     ultima = float(st.session_state.get("sst_retencao_verificada_em", 0.0))
     if agora - ultima >= 3600:
