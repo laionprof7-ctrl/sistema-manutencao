@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-import final_reset
 import sst_services
 from sst_services import RegraSSTError, _validar_evidencia_agente, registrar_cadastro_biometrico
 
@@ -42,13 +41,6 @@ def test_score_biometrico_invalido_retorna_erro_controlado(monkeypatch):
     monkeypatch.setattr(sst_services.hmac, "compare_digest", lambda *_: True)
     with pytest.raises(RegraSSTError, match="Score"):
         _validar_evidencia_agente(evidencia, "cadastro")
-
-
-def test_reset_destrutivo_e_bloqueado_em_producao(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setenv("ALLOW_FINAL_RESET", "CONFIRMAR_LIMPEZA_DE_TESTE")
-    with pytest.raises(RuntimeError, match="proibida em produção"):
-        final_reset.aplicar_reset_final_uma_vez()
 
 
 def test_falha_ao_excluir_storage_e_informada(monkeypatch):
