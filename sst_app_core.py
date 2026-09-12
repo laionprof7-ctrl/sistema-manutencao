@@ -9,7 +9,7 @@ import streamlit as st
 
 from sst_database import inicializar_banco_sst
 from sst_reports import gerar_pdf_documento
-from sst_ui import aplicar_estilo_sst, mostrar_notificacao, renderizar_cabecalho_modulo, renderizar_card_texto
+from sst_ui import aplicar_estilo_sst, mostrar_notificacao, renderizar_cabecalho_modulo
 from sst_services import (
     MOTIVOS_ENTREGA,
     MOTIVOS_OS,
