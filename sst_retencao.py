@@ -73,9 +73,7 @@ def limpar_documentos_sem_assinatura_expirados() -> dict:
             caminho = row.get("storage_path")
             if not caminho:
                 continue
-            try:
-                _storage_excluir(str(caminho))
-            except Exception:
+            if not _storage_excluir(str(caminho)):
                 # O registro já saiu do sistema; falha de limpeza do objeto não deve
                 # restaurar um documento expirado nem interromper o uso do módulo.
                 falhas += 1
