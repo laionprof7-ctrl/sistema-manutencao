@@ -1,4 +1,4 @@
-from agent_biometrico.agent import BACKEND_READER_MODEL, _origin_allowed
+from agent_biometrico.agent import BACKEND_READER_MODEL
 
 
 def test_modelo_do_agente_compativel_com_backend_sst():
