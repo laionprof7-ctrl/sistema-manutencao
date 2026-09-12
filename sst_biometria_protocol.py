@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 PROTOCOL_VERSION = "1"
-READER_MODEL = "Nitgen/FingerTech Hamster DX HFDU06"
+READER_MODEL = "Nitgen Hamster DX HFDU06"
 MAX_EVIDENCE_AGE_SECONDS = 120
 
 # Campos que nunca devem viajar do agente local para o backend do SST.
