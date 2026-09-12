@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Index, Integer,
-    MetaData, String, Table, Text, create_engine, insert,
+    LargeBinary, MetaData, String, Table, Text, UniqueConstraint, create_engine, insert,
     select, update
 )
 from sqlalchemy.engine import Engine
@@ -76,6 +76,25 @@ CHAMADOS = Table(
 Index("ix_chamados_placa", CHAMADOS.c.placa)
 Index("ix_chamados_status", CHAMADOS.c.status)
 Index("ix_chamados_criado_em", CHAMADOS.c.criado_em)
+
+DOCUMENTOS_MANUTENCAO = Table(
+    "documentos_manutencao", METADATA,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chamado_id", Integer, ForeignKey("chamados.id", ondelete="RESTRICT"), nullable=False),
+    Column("id_os", String(32), nullable=False),
+    Column("versao_documento", Integer, nullable=False),
+    Column("hash_documento", String(64), nullable=False),
+    Column("pdf_arquivo", LargeBinary, nullable=True),
+    Column("storage_path", String(500), nullable=True),
+    Column("nome_arquivo", String(255), nullable=False),
+    Column("gerado_por", String(40), ForeignKey("usuarios.usuario", ondelete="SET NULL"), nullable=True),
+    Column("gerado_em", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("chamado_id", "versao_documento", name="uq_documento_manutencao_versao"),
+    CheckConstraint("versao_documento >= 1", name="ck_documento_manutencao_versao"),
+)
+Index("ix_documentos_manutencao_chamado", DOCUMENTOS_MANUTENCAO.c.chamado_id)
+Index("ix_documentos_manutencao_id_os", DOCUMENTOS_MANUTENCAO.c.id_os)
+Index("ix_documentos_manutencao_gerado_por", DOCUMENTOS_MANUTENCAO.c.gerado_por)
 
 AUDITORIA = Table(
     "auditoria", METADATA,

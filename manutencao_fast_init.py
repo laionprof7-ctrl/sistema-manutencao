@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 import database as db
 
-SCHEMA_MARKER = "schema_manutencao_v1"
+SCHEMA_MARKER = "schema_manutencao_v2_documentos"
 ARQUIVAMENTO_INTERVALO_SEGUNDOS = 300
 
 _lock = threading.Lock()

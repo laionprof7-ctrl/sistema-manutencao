@@ -15,6 +15,7 @@ from database import (
     obter_usuario, transacao, USUARIOS, utcnow,
 )
 from permissions import pode_editar_usuario, pode_gerir_os, pode_gerir_usuarios, pode_triagem, pode_ver_oficina
+from manutencao_documentos import listar_documentos_os, obter_pdf_documento
 from security import hash_senha, normalizar_usuario, verificar_senha
 from services import (
     ConcorrenciaError, RegraNegocioError, alterar_nome, alterar_nivel, aprovar_chamado,
@@ -129,6 +130,7 @@ def sair(mensagem: str | None = None):
     st.session_state.user_info = None
     st.session_state.aba_ativa = "Portal"
     st.session_state.session_expires_at = None
+    st.session_state.pop("documento_manutencao_pronto", None)
     if mensagem:
         st.session_state["logout_message"] = mensagem
     st.rerun()
@@ -271,6 +273,7 @@ def logout_callback():
     st.session_state.user_info = None
     st.session_state.aba_ativa = "Portal"
     st.session_state.session_expires_at = None
+    st.session_state.pop("documento_manutencao_pronto", None)
 
 if logo_img:
     st.sidebar.image(logo_img, use_container_width=True)
@@ -539,6 +542,45 @@ if aba == "Oficina":
                     except Exception:
                         data_conclusao = "Não informada"
                     st.write(f"**Data de conclusão:** {data_conclusao}")
+
+                    if pode_triagem(nivel_user):
+                        documentos = listar_documentos_os(row.id)
+                        if documentos:
+                            opcoes_documentos = {
+                                f"Versão {doc['versao_documento']} · {doc['gerado_em']:%d/%m/%Y %H:%M}": doc
+                                for doc in documentos
+                            }
+                            rotulo_documento = st.selectbox(
+                                "Documento final arquivado",
+                                list(opcoes_documentos),
+                                key=f"doc_final_os_{row.id}",
+                            )
+                            documento = opcoes_documentos[rotulo_documento]
+                            if st.button(
+                                "Preparar documento final",
+                                key=f"preparar_doc_final_{documento['id']}",
+                                use_container_width=True,
+                            ):
+                                ok_pdf, dados_pdf = executar(obter_pdf_documento, documento["id"])
+                                if ok_pdf:
+                                    pdf, nome, hash_documento = dados_pdf
+                                    st.session_state["documento_manutencao_pronto"] = {
+                                        "id": documento["id"],
+                                        "pdf": pdf,
+                                        "nome": nome,
+                                        "hash": hash_documento,
+                                    }
+                            preparado = st.session_state.get("documento_manutencao_pronto")
+                            if isinstance(preparado, dict) and preparado.get("id") == documento["id"]:
+                                st.download_button(
+                                    "Baixar documento final arquivado",
+                                    data=preparado["pdf"],
+                                    file_name=preparado["nome"],
+                                    mime="application/pdf",
+                                    key=f"baixar_doc_final_{documento['id']}_{preparado['hash'][:12]}",
+                                    use_container_width=True,
+                                    on_click="ignore",
+                                )
 
                     if pode_gerir_os(nivel_user):
                         st.divider()

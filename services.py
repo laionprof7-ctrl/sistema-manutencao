@@ -206,6 +206,7 @@ def atualizar_oficina(actor: dict, id_interno: int, novo_status: str, mecanico: 
         raise RegraNegocioError("Sem permissão para alterar a oficina.")
     if novo_status not in {"Aguardando Manutenção", "Em Andamento", "Concluído"}:
         raise RegraNegocioError("Status inválido.")
+    documento_id = None
     with transacao() as conn:
         row = _chamado(conn, id_interno)
         if not row or row["arquivado"] or not row["aprovado_coordenador"]:
@@ -248,6 +249,38 @@ def atualizar_oficina(actor: dict, id_interno: int, novo_status: str, mecanico: 
         acao = "OS_STATUS_CORRIGIDO_ADMIN" if retrocesso else "OS_OFICINA_ATUALIZADA"
         detalhes = f"status_anterior={status_atual};status_novo={novo_status};mecanico={informado}"
         registrar_auditoria(conn, actor["usuario"], acao, "chamado", row["id_os"], detalhes)
+        if novo_status == "Concluído" and status_atual != "Concluído":
+            from manutencao_documentos import registrar_documento_final
+
+            chamado_final = dict(row)
+            chamado_final.update({
+                "status": novo_status,
+                "mecanico_responsavel": informado,
+                "data_liberacao": liberacao,
+            })
+            documento_id = registrar_documento_final(conn, chamado_final, actor["usuario"])
+            registrar_auditoria(
+                conn,
+                actor["usuario"],
+                "OS_DOCUMENTO_FINAL_GERADO",
+                "chamado",
+                row["id_os"],
+                f"documento_id={documento_id}",
+            )
+
+    if documento_id is not None:
+        from manutencao_documentos import sincronizar_documento
+
+        sincronizado = sincronizar_documento(documento_id)
+        with transacao() as conn:
+            registrar_auditoria(
+                conn,
+                actor["usuario"],
+                "OS_DOCUMENTO_STORAGE_OK" if sincronizado else "OS_DOCUMENTO_STORAGE_PENDENTE",
+                "chamado",
+                row["id_os"],
+                f"documento_id={documento_id}",
+            )
 
 
 def arquivar_chamado(actor: dict, id_interno: int, arquivar: bool, versao: int) -> None:

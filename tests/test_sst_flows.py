@@ -3,7 +3,9 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import delete, insert, select
 
-from database import AUDITORIA, CHAMADOS, USUARIOS, transacao, utcnow
+from database import (
+    AUDITORIA, CHAMADOS, DOCUMENTOS_MANUTENCAO, USUARIOS, transacao, utcnow,
+)
 from security import hash_senha
 from sst_database import (
     ASSINATURAS_SST, BIOMETRIAS_COLABORADORES, COLABORADORES,
@@ -27,7 +29,8 @@ def banco_sst_limpo():
         for tabela in (
             ASSINATURAS_SST, BIOMETRIAS_COLABORADORES, DOCUMENTOS_SST,
             ITENS_ENTREGA_EPI, ENTREGAS_EPI, COLABORADORES, GHE_VINCULOS,
-            GHE, EPIS, CONTADORES_SST, CHAMADOS, AUDITORIA, USUARIOS,
+            GHE, EPIS, CONTADORES_SST, DOCUMENTOS_MANUTENCAO, CHAMADOS,
+            AUDITORIA, USUARIOS,
         ):
             conn.execute(delete(tabela))
         agora = utcnow()
