@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from sqlalchemy import delete, insert, select, update
 
 import database as db
@@ -26,6 +28,10 @@ def aplicar_reset_final_uma_vez() -> dict[str, int | bool]:
     nos reruns normais do Streamlit.
     """
     global _PROCESS_DONE
+    if os.getenv("APP_ENV", "development").strip().lower() == "production":
+        raise RuntimeError("A limpeza final é proibida em produção.")
+    if os.getenv("ALLOW_FINAL_RESET", "") != "CONFIRMAR_LIMPEZA_DE_TESTE":
+        raise RuntimeError("Limpeza de teste não autorizada explicitamente.")
     if _PROCESS_DONE:
         return {"aplicado": False}
 
