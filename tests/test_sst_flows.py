@@ -15,6 +15,7 @@ from sst_services import (
     cadastrar_ghe, registrar_entrega_epi,
 )
 from sst_fast_init import SCHEMA_VERSION, SCHEMA_VERSION_KEY, _marcar_schema_atualizado
+from sst_retencao import limpar_documentos_sem_assinatura_expirados
 
 ADMIN = {"usuario": "admin", "nome": "Admin Teste", "nivel": 4.0}
 
@@ -95,3 +96,27 @@ def test_marcador_de_schema_pode_ser_atualizado_repetidamente():
         ).scalar_one()
 
     assert versao == SCHEMA_VERSION
+
+
+def test_retencao_remove_apenas_documento_pendente_apos_60_dias():
+    colaborador_id, _ = _estrutura_basica()
+    agora = utcnow()
+    with transacao() as conn:
+        for numero, idade_dias in (("SST-59-DIAS", 59), ("SST-61-DIAS", 61)):
+            conn.execute(insert(DOCUMENTOS_SST).values(
+                numero=numero,
+                colaborador_id=colaborador_id,
+                tipo="Entrega de EPI",
+                titulo="Teste de retenção",
+                status="Aguardando Assinatura",
+                criado_por="admin",
+                criado_em=agora - timedelta(days=idade_dias),
+                fechado_em=agora - timedelta(days=idade_dias),
+            ))
+
+    resultado = limpar_documentos_sem_assinatura_expirados()
+
+    with transacao() as conn:
+        numeros = set(conn.execute(select(DOCUMENTOS_SST.c.numero)).scalars())
+    assert resultado == {"removidos": 1, "storage_falhas": 0}
+    assert numeros == {"SST-59-DIAS"}
