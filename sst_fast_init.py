@@ -58,24 +58,35 @@ def _schema_ja_atualizado() -> bool:
 
 def _marcar_schema_atualizado() -> None:
     with db.ENGINE.begin() as conn:
-        existente = conn.execute(
-            select(db.CONTADORES_SST.c.valor).where(
-                db.CONTADORES_SST.c.chave == SCHEMA_VERSION_KEY
+        valores = {"chave": SCHEMA_VERSION_KEY, "valor": SCHEMA_VERSION}
+        if conn.dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as dialect_insert
+            stmt = dialect_insert(db.CONTADORES_SST).values(**valores).on_conflict_do_update(
+                index_elements=[db.CONTADORES_SST.c.chave],
+                set_={"valor": SCHEMA_VERSION},
             )
-        ).scalar_one_or_none()
-        if existente is None:
-            conn.execute(
-                db.CONTADORES_SST.insert().values(
-                    chave=SCHEMA_VERSION_KEY,
-                    valor=SCHEMA_VERSION,
-                )
+            conn.execute(stmt)
+        elif conn.dialect.name == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+            stmt = dialect_insert(db.CONTADORES_SST).values(**valores).on_conflict_do_update(
+                index_elements=[db.CONTADORES_SST.c.chave],
+                set_={"valor": SCHEMA_VERSION},
             )
+            conn.execute(stmt)
         else:
-            conn.execute(
-                db.CONTADORES_SST.update()
-                .where(db.CONTADORES_SST.c.chave == SCHEMA_VERSION_KEY)
-                .values(valor=SCHEMA_VERSION)
-            )
+            existente = conn.execute(
+                select(db.CONTADORES_SST.c.valor).where(
+                    db.CONTADORES_SST.c.chave == SCHEMA_VERSION_KEY
+                )
+            ).scalar_one_or_none()
+            if existente is None:
+                conn.execute(db.CONTADORES_SST.insert().values(**valores))
+            else:
+                conn.execute(
+                    db.CONTADORES_SST.update()
+                    .where(db.CONTADORES_SST.c.chave == SCHEMA_VERSION_KEY)
+                    .values(valor=SCHEMA_VERSION)
+                )
 
 
 def inicializar_banco_sst_rapido() -> None:
@@ -111,7 +122,7 @@ def inicializar_banco_sst_rapido() -> None:
                 item["name"] for item in insp.get_indexes(tabela) if item.get("name")
             }
         if indice.name not in indices_por_tabela[tabela]:
-            indice.create(bind=db.ENGINE, checkfirst=False)
+            indice.create(bind=db.ENGINE, checkfirst=True)
             indices_por_tabela[tabela].add(indice.name)
 
     db._inicializar_contador_documentos_ano_atual()
