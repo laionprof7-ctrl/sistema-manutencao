@@ -27,18 +27,6 @@ try:
 except Exception:
     pass
 
-# Limpeza única dos dados operacionais usados durante o desenvolvimento.
-# O marcador persistido no banco garante que reinícios futuros não apaguem
-# dados reais cadastrados após a liberação do sistema.
-try:
-    from final_reset import aplicar_reset_final_uma_vez
-
-    aplicar_reset_final_uma_vez()
-except Exception as exc:
-    # Não derruba o portal por causa da rotina de finalização. Mantemos a
-    # informação na sessão para diagnóstico, sem expor detalhes ao usuário.
-    st.session_state["final_reset_erro"] = str(exc)
-
 # A pilha SST só é preparada quando o usuário realmente está no módulo.
 if st.session_state.get("aba_ativa") == "SST":
     try:
