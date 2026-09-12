@@ -51,7 +51,7 @@ if st.session_state.get("aba_ativa") == "SST":
                 st.session_state["sst_retencao_verificada_em"] = agora
                 if resultado.get("removidos"):
                     st.session_state["sst_mensagem"] = (
-                        f"{resultado['removidos']} documento(s) sem assinatura há 7 dias "
+                        f"{resultado['removidos']} documento(s) sem assinatura há 60 dias "
                         "foram removidos automaticamente."
                     )
             except Exception:
