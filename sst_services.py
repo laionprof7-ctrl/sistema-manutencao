@@ -113,11 +113,12 @@ def _storage_baixar(path: str) -> bytes:
     return _storage_requisicao("GET", path)
 
 
-def _storage_excluir(path: str) -> None:
+def _storage_excluir(path: str) -> bool:
     try:
         _storage_requisicao("DELETE", path)
+        return True
     except Exception:
-        pass
+        return False
 
 
 def _usar_storage_sst() -> bool:
@@ -838,6 +839,7 @@ def listar_entregas(limite: int = 100) -> list[dict]:
 
 BIOMETRIA_MODELO_OFICIAL = "Nitgen Hamster DX HFDU06"
 BIOMETRIA_JANELA_EVENTO_SEGUNDOS = 180
+BIOMETRIA_PROTOCOLO_VERSAO = "1"
 
 
 def _segredo_agente_biometrico() -> str:
@@ -902,6 +904,9 @@ def _validar_evidencia_agente(evidencia: dict, tipo_evento: str) -> dict:
 
     assinatura = _texto_evidencia(evidencia.get("assinatura_hmac"), 128)
     evento_id = _texto_evidencia(evidencia.get("evento_id"), 120)
+    protocolo = _texto_evidencia(evidencia.get("protocolo_versao"), 20)
+    if protocolo != BIOMETRIA_PROTOCOLO_VERSAO:
+        raise RegraSSTError("Versão do protocolo biométrico incompatível.")
     tipo = _texto_evidencia(evidencia.get("tipo_evento"), 40)
     if tipo != tipo_evento:
         raise RegraSSTError("Tipo de evento biométrico inválido.")
@@ -916,8 +921,23 @@ def _validar_evidencia_agente(evidencia: dict, tipo_evento: str) -> dict:
     if not hmac.compare_digest(assinatura.lower(), esperado.lower()):
         raise RegraSSTError("A evidência não foi autenticada pelo agente biométrico autorizado.")
 
+    try:
+        colaborador_id = int(evidencia.get("colaborador_id"))
+    except (TypeError, ValueError) as exc:
+        raise RegraSSTError("Colaborador ausente na evidência biométrica.") from exc
+
+    score = evidencia.get("score_verificacao")
+    if score is not None:
+        try:
+            score = int(score)
+        except (TypeError, ValueError) as exc:
+            raise RegraSSTError("Score da evidência biométrica é inválido.") from exc
+        if score < 0:
+            raise RegraSSTError("Score da evidência biométrica é inválido.")
+
     return {
         "evento_id": evento_id,
+        "colaborador_id": colaborador_id,
         "timestamp": momento,
         "agente_id": _texto_evidencia(evidencia.get("agente_id"), 120),
         "estacao": _texto_evidencia(evidencia.get("estacao"), 160),
@@ -927,7 +947,7 @@ def _validar_evidencia_agente(evidencia: dict, tipo_evento: str) -> dict:
         "referencia_biometrica": _texto_evidencia(evidencia.get("referencia_biometrica"), 255),
         "template_hash": _texto_evidencia(evidencia.get("template_hash"), 64, False),
         "resultado": _texto_evidencia(evidencia.get("resultado"), 40),
-        "score_verificacao": int(evidencia.get("score_verificacao")) if evidencia.get("score_verificacao") is not None else None,
+        "score_verificacao": score,
     }
 
 
@@ -952,6 +972,8 @@ def registrar_cadastro_biometrico(actor: dict, colaborador_id: int, evidencia: d
     """
     _exigir_operacao(actor)
     ev = _validar_evidencia_agente(evidencia, "cadastro")
+    if ev["colaborador_id"] != int(colaborador_id):
+        raise RegraSSTError("A evidência biométrica pertence a outro colaborador.")
     if ev["resultado"] != "CADASTRADO":
         raise RegraSSTError("O agente não confirmou o cadastro biométrico.")
     if ev["dispositivo_modelo"] != BIOMETRIA_MODELO_OFICIAL:
@@ -1081,11 +1103,16 @@ def registrar_assinatura_biometrica(actor: dict, documento_id: int, colaborador_
         ))
         assinatura_id = int(result.inserted_primary_key[0])
 
-        conn.execute(
+        alterado = conn.execute(
             update(DOCUMENTOS_SST)
-            .where(DOCUMENTOS_SST.c.id == int(documento_id))
+            .where(
+                (DOCUMENTOS_SST.c.id == int(documento_id))
+                & (DOCUMENTOS_SST.c.status == "Aguardando Assinatura")
+            )
             .values(status="Assinado")
         )
+        if alterado.rowcount != 1:
+            raise RegraSSTError("Este documento já foi assinado ou alterado por outra pessoa.")
         registrar_auditoria(
             conn, actor["usuario"], "SST_DOCUMENTO_ASSINADO_BIOMETRIA", "sst_documento", doc["numero"],
             f"assinatura_id={assinatura_id};sha256={doc['hash_documento']};evento={ev['evento_id']};agente={ev['agente_id']};score={ev['score_verificacao']}"
