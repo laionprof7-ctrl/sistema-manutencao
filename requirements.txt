@@ -1,8 +1,8 @@
-streamlit>=1.40,<2
-pandas>=2.2,<3
-Pillow>=10,<13
-reportlab>=4.2,<5
-SQLAlchemy>=2.0,<3
-psycopg[binary]>=3.2,<4
-argon2-cffi>=23.1,<26
-pytest>=8,<10
+streamlit==1.63.0
+pandas==2.2.3
+Pillow==12.3.0
+reportlab==4.4.9
+SQLAlchemy==2.0.52
+psycopg[binary]==3.3.5
+argon2-cffi==25.1.0
+pytest==9.1.1
