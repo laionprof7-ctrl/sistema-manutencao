@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Index, Integer,
-    MetaData, String, Table, Text, UniqueConstraint, create_engine, delete, insert,
+    MetaData, String, Table, Text, create_engine, insert,
     select, update
 )
 from sqlalchemy.engine import Engine
@@ -156,18 +156,26 @@ def arquivar_chamados_expirados() -> int:
         ).mappings().all()
         if not expirados:
             return 0
-        ids = [r["id"] for r in expirados]
-        conn.execute(
-            update(CHAMADOS)
-            .where(CHAMADOS.c.id.in_(ids))
-            .values(arquivado=True, atualizado_em=utcnow(), versao=CHAMADOS.c.versao + 1)
-        )
+        arquivados = []
         for row in expirados:
-            registrar_auditoria(
-                conn, "sistema", "OS_ARQUIVADA_EXPIRACAO", "chamado", row["id_os"],
-                "Chamado não aprovado no prazo de 7 dias."
+            result = conn.execute(
+                update(CHAMADOS)
+                .where(
+                    (CHAMADOS.c.id == row["id"])
+                    & (CHAMADOS.c.aprovado_coordenador == False)
+                    & (CHAMADOS.c.arquivado == False)
+                    & (CHAMADOS.c.excluido == False)
+                    & (CHAMADOS.c.criado_em < limite)
+                )
+                .values(arquivado=True, atualizado_em=utcnow(), versao=CHAMADOS.c.versao + 1)
             )
-        return len(expirados)
+            if result.rowcount == 1:
+                arquivados.append(row)
+                registrar_auditoria(
+                    conn, "sistema", "OS_ARQUIVADA_EXPIRACAO", "chamado", row["id_os"],
+                    "Chamado não aprovado no prazo de 7 dias."
+                )
+        return len(arquivados)
 
 
 def listar_chamados() -> pd.DataFrame:
