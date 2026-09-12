@@ -7,11 +7,11 @@ from sqlalchemy import delete, select
 from database import registrar_auditoria, transacao, utcnow
 from sst_database import ASSINATURAS_SST, DOCUMENTOS_SST
 
-PRAZO_ASSINATURA_DIAS = 7
+PRAZO_ASSINATURA_DIAS = 60
 
 
 def limpar_documentos_sem_assinatura_expirados() -> dict:
-    """Remove documentos pendentes há 7 dias sem apagar o histórico da entrega.
+    """Remove documentos pendentes há 60 dias sem apagar o histórico da entrega.
 
     A entrega de EPI continua preservada como fato operacional. Somente o documento
     eletrônico que ficou sem assinatura é removido da fila, dos indicadores e do
@@ -50,10 +50,10 @@ def limpar_documentos_sem_assinatura_expirados() -> dict:
             registrar_auditoria(
                 conn,
                 "sistema",
-                "SST_DOCUMENTO_EXPIRADO_7_DIAS",
+                "SST_DOCUMENTO_EXPIRADO_60_DIAS",
                 "sst_documento",
                 str(row["numero"]),
-                "Documento aguardando assinatura por 7 dias; removido automaticamente da fila.",
+                "Documento aguardando assinatura por 60 dias; removido automaticamente da fila.",
             )
 
         if expirados:
