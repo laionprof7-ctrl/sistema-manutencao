@@ -146,15 +146,17 @@ def aplicar_tema_global() -> None:
             letter-spacing: -.015em !important;
         }}
 
-        /* SST: ícones grandes, verdes e consistentes com a referência aprovada. */
-        .st-key-sst_menu_cards button {{
+        /* SST e Manutenção: mesmos ícones grandes do padrão visual aprovado. */
+        .st-key-sst_menu_cards button,
+        .st-key-manutencao_menu_cards button {{
             display: flex !important;
             align-items: center !important;
             justify-content: flex-start !important;
             gap: 1.45rem !important;
             text-align: left !important;
         }}
-        .st-key-sst_menu_cards button::before {{
+        .st-key-sst_menu_cards button::before,
+        .st-key-manutencao_menu_cards button::before {{
             content: "";
             display: block;
             flex: 0 0 76px;
@@ -175,15 +177,6 @@ def aplicar_tema_global() -> None:
         .st-key-sst_menu_4 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0iTTIwIDRoMjZsMTAgMTB2MjdIMzh2LTZoMTJWMThINDJWMTBIMjB2MjNoLTZWNGg2eiIvPjxwYXRoIGQ9Ik0yNSAxOGgxNXY1SDI1em0wIDEwaDE4djVIMjV6Ii8+PHBhdGggZD0iTTQgNDJjNi01IDEyLTYgMTgtMmw2IDRoMTFjNSAwIDggMyA4IDdIMjVsLTgtNC0xMCA1LTMtMTB6bTIwIDhoMjRjNCAwIDcgMiA4IDZIMjRsLTEyIDQtOC01IDIwLTV6Ii8+PC9zdmc+"); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0iTTIwIDRoMjZsMTAgMTB2MjdIMzh2LTZoMTJWMThINDJWMTBIMjB2MjNoLTZWNGg2eiIvPjxwYXRoIGQ9Ik0yNSAxOGgxNXY1SDI1em0wIDEwaDE4djVIMjV6Ii8+PHBhdGggZD0iTTQgNDJjNi01IDEyLTYgMTgtMmw2IDRoMTFjNSAwIDggMyA4IDdIMjVsLTgtNC0xMCA1LTMtMTB6bTIwIDhoMjRjNCAwIDcgMiA4IDZIMjRsLTEyIDQtOC01IDIwLTV6Ii8+PC9zdmc+"); }}
         .st-key-sst_menu_5 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTIgNGgyN2wxMyAxM3Y0M0gxMlY0em03IDd2NDJoMjZWMjJIMzRWMTFIMTl6bTIyIDMgNyA3aC03di03eiIvPjxwYXRoIGQ9Ik0yNCAzMGgxNnY1SDI0em0wIDEwaDE2djVIMjR6Ii8+PC9zdmc+"); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTIgNGgyN2wxMyAxM3Y0M0gxMlY0em03IDd2NDJoMjZWMjJIMzRWMTFIMTl6bTIyIDMgNyA3aC03di03eiIvPjxwYXRoIGQ9Ik0yNCAzMGgxNnY1SDI0em0wIDEwaDE2djVIMjR6Ii8+PC9zdmc+"); }}
         .st-key-sst_menu_6 button::before {{ -webkit-mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0ibTQ1IDUgMTQgMTQtMzEgMzEtMTcgNCA0LTE3TDQ1IDV6bTAgOEwyMSAzN2w2IDYgMjQtMjQtNi02eiIvPjxwYXRoIGQ9Ik00IDU3YzktNSAxNS01IDIyLTEgNSAzIDkgMyAxMyAwIDUtNCAxMC00IDIxIDF2NUg0di01eiIvPjwvc3ZnPg=="); mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0ibTQ1IDUgMTQgMTQtMzEgMzEtMTcgNCA0LTE3TDQ1IDV6bTAgOEwyMSAzN2w2IDYgMjQtMjQtNi02eiIvPjxwYXRoIGQ9Ik00IDU3YzktNSAxNS01IDIyLTEgNSAzIDkgMyAxMyAwIDUtNCAxMC00IDIxIDF2NUg0di01eiIvPjwvc3ZnPg=="); }}
-
-        /* A Manutenção ainda usa símbolos de texto nos rótulos. */
-        .st-key-manutencao_menu_cards button p::first-letter {{
-            font-size: 3.05rem !important;
-            font-weight: 700 !important;
-            line-height: .8 !important;
-            color: var(--copa-green-dark) !important;
-            -webkit-text-fill-color: var(--copa-green-dark) !important;
-        }}
 
         .st-key-sst_menu_cards button:hover,
         .st-key-manutencao_menu_cards button:hover {{
@@ -231,8 +224,8 @@ def aplicar_tema_global() -> None:
             .st-key-manutencao_menu_cards button {{ min-height: 120px !important; height: 120px !important; }}
             .st-key-sst_menu_cards button p,
             .st-key-manutencao_menu_cards button p {{ font-size: 1.12rem !important; }}
-            .st-key-sst_menu_cards button::before {{ flex-basis: 58px; width: 58px; height: 58px; }}
-            .st-key-manutencao_menu_cards button p::first-letter {{ font-size: 2.4rem !important; }}
+            .st-key-sst_menu_cards button::before,
+            .st-key-manutencao_menu_cards button::before {{ flex-basis: 58px; width: 58px; height: 58px; }}
         }}
 
         @media (max-width: 768px) {{
@@ -244,11 +237,12 @@ def aplicar_tema_global() -> None:
             button[data-testid="stBaseButton-primary"], div.stButton > button[kind="primary"] {{ min-height: 58px !important; font-size: 1.08rem !important; }}
             .st-key-sst_menu_cards button,
             .st-key-manutencao_menu_cards button {{ min-height: 96px !important; height: 96px !important; padding: .8rem .75rem !important; }}
-            .st-key-sst_menu_cards button {{ gap: .8rem !important; }}
+            .st-key-sst_menu_cards button,
+            .st-key-manutencao_menu_cards button {{ gap: .8rem !important; }}
             .st-key-sst_menu_cards button p,
             .st-key-manutencao_menu_cards button p {{ font-size: .98rem !important; }}
-            .st-key-sst_menu_cards button::before {{ flex-basis: 44px; width: 44px; height: 44px; }}
-            .st-key-manutencao_menu_cards button p::first-letter {{ font-size: 2rem !important; }}
+            .st-key-sst_menu_cards button::before,
+            .st-key-manutencao_menu_cards button::before {{ flex-basis: 44px; width: 44px; height: 44px; }}
         }}
         </style>
         """,
